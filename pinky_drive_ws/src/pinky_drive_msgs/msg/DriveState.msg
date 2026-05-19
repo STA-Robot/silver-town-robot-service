@@ -1,0 +1,12 @@
+std_msgs/Header header
+string robot_name
+string map_name
+float64[3] pose
+float32 battery_soc
+string state
+string nav2_state
+bool available
+bool emergency
+bool command_active
+string active_request_id
+string message

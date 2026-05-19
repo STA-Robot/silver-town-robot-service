@@ -1,0 +1,18 @@
+string robot_name
+string map_name
+float64 x
+float64 y
+float64 yaw
+float64 speed_limit
+string request_id
+string destination_name
+string command_mode
+---
+bool success
+bool retryable
+string final_state
+string message
+---
+string state
+float64 distance_remaining
+string message
