@@ -1,0 +1,93 @@
+# Generated from site_config/config/rmf_test.site.yaml.
+# Edit the site config and rerun `ros2 run site_config generate_configs`.
+rmf_fleet:
+  name: pinky
+  limits:
+    linear: [0.2, 0.5]
+    angular: [1.0, 2.0]
+  profile:
+    footprint: 0.12
+    vicinity: 0.35
+  reversible: false
+  battery_system:
+    voltage: 7.4
+    capacity: 2.0
+    charging_current: 1.0
+  mechanical_system:
+    mass: 2.0
+    moment_of_inertia: 1.0
+    friction_coefficient: 0.22
+  ambient_system:
+    power: 5.0
+  tool_system:
+    power: 0.0
+  recharge_threshold: 0.10
+  recharge_soc: 1.0
+  publish_fleet_state: 10.0
+  account_for_battery_drain: false
+  task_capabilities:
+    loop: true
+    delivery: false
+  finishing_request: park
+  responsive_wait: true
+  max_merge_waypoint_distance: 0.02
+  max_merge_lane_distance: 0.02
+  robots:
+    pinky1:
+      charger: start
+    pinky2:
+      charger: start
+  robot_state_update_frequency: 10.0
+
+fleet_manager:
+  # Template RobotAPI placeholders. Replace these when RobotAPI is wired to
+  # Pinky's ROS 2 drive API instead of the original HTTP-style template.
+  prefix: ""
+  user: ""
+  password: ""
+  robots:
+    pinky1:
+      rmf_level: L1
+      drive_namespace: /pinky1/drive
+      navigate_action: navigate
+      stop_service: stop
+      state_topic: state
+      state_timeout: 2.0
+      action_server_timeout: 2.0
+      stop_service_timeout: 2.0
+      goal_acceptance_timeout: 5.0
+    pinky2:
+      rmf_level: L1
+      drive_namespace: /pinky2/drive
+      navigate_action: navigate
+      stop_service: stop
+      state_topic: state
+      state_timeout: 2.0
+      action_server_timeout: 2.0
+      stop_service_timeout: 2.0
+      goal_acceptance_timeout: 5.0
+
+reference_coordinates:
+  L1:
+    rmf:
+      - [3.157686640049087, -3.206947422008405] # tent_2
+      - [2.971966440416778, -3.099419899179415]
+      - [3.0912198426324036, -2.88631916675254]
+      - [3.2182904977724522, -2.6576040760359025]
+      - [3.4118279503291853, -2.7592485116124914] # tent_1
+      - [1.9671069311239384, -2.550076553206912]
+      - [2.2036594223240833, -2.6908274009647024]
+      - [2.377653742569757, -2.4503662833023454]
+      - [2.5164502770964408, -2.219676731795518]
+      - [2.2623089668163434, -2.076971570806622] # start
+    robot:
+      - [1.04756, -0.68246] # tent_2
+      - [0.8632, -0.57572]
+      - [0.98158, -0.36418]
+      - [1.10772, -0.13714]
+      - [1.29984, -0.23804] # tent_1
+      - [-0.1343, -0.0304]
+      - [0.10052, -0.17012]
+      - [0.27324, 0.06858]
+      - [0.41102, 0.29758]
+      - [0.15874, 0.43924] # start
