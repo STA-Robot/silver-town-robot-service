@@ -8,26 +8,29 @@ ROS domain bridge를 사용할 때 RMF, `pinky1`, `pinky2`는 서로 다른 `ROS
 
 ## 목표
 
-- RMF -> Pinky: 주행, 정지, 로봇팔 등 명령을 하나의 topic으로 보낸다.
+- RMF -> Pinky: 주행, 정지, 사람 추종 등 명령을 하나의 topic으로 보낸다.
 - Pinky -> RMF: 현재 pose, 배터리, 주행 상태, 명령 상태를 topic으로 보고한다.
 - Action/service 없이 domain bridge로 전달 가능한 topic-only 계약을 만든다.
 
 ## Topic
 
-각 로봇은 아래 namespace를 사용한다.
+각 Pinky는 별도 `ROS_DOMAIN_ID`에서 실행되므로 drive manager 내부 topic에는 로봇 namespace를 붙이지 않는다. 로봇 구분은 RMF domain 쪽 topic 이름과 domain bridge remap으로 처리한다.
 
-```text
-/{robot_name}
-```
-
-예시:
+Pinky domain 내부 topic:
 
 | Topic | 방향 | Message |
 |---|---|---|
-| `/pinky1/command` | RMF -> Pinky | `pinky_drive_msgs/msg/DriveCommand` |
-| `/pinky1/state` | Pinky -> RMF | `pinky_drive_msgs/msg/DriveState` |
+| `/command` | RMF -> Pinky | `pinky_drive_msgs/msg/DriveCommand` |
+| `/state` | Pinky -> RMF | `pinky_drive_msgs/msg/DriveState` |
 
-Domain bridge는 각 로봇별로 위 topic만 bridge한다.
+RMF domain에서는 로봇별 topic으로 bridge한다.
+
+| RMF domain topic | Pinky domain topic |
+|---|---|
+| `/pinky1/command` | pinky1 domain `/command` |
+| `/pinky1/state` | pinky1 domain `/state` |
+| `/pinky2/command` | pinky2 domain `/command` |
+| `/pinky2/state` | pinky2 domain `/state` |
 
 ## DriveCommand
 
@@ -58,7 +61,7 @@ string payload_json
 | `header.stamp` | RMF가 명령을 생성한 시각 |
 | `robot_name` | 대상 로봇 이름. 예: `pinky1` |
 | `command_id` | 명령 고유 id. RMF가 생성하고 Pinky가 state에서 echo한다. |
-| `command_type` | 명령 종류. 예: `navigate`, `stop`, `arm`, `dock`, `returning` |
+| `command_type` | 명령 종류. 예: `navigate`, `returning`, `follow`, `stop` |
 | `map_name` | RMF level 이름. 예: `L1` |
 | `x`, `y`, `yaw` | `navigate`, `returning`에서 사용하는 목표 pose |
 | `speed_limit` | 선택적 속도 제한. 없으면 `0.0` |
@@ -75,7 +78,6 @@ MVP에서 우선 아래 값만 사용한다.
 | `returning` | 복귀/대기 위치로 이동 |
 | `stop` | 현재 motion 명령 정지 |
 
-추후 로봇팔이나 기타 동작은 같은 topic에서 `command_type = "arm"`처럼 확장한다. 추가 인자는 `payload_json`에 넣는다.
 
 ## DriveState
 
@@ -144,20 +146,20 @@ string message
 Navigate:
 
 ```text
-RMF publishes /pinky1/command
+RMF publishes `/pinky1/command`, bridged to Pinky domain `/command`
   command_id=rmf-001
   command_type=navigate
   map_name=L1
   x=1.0, y=2.0, yaw=0.0
 
-Pinky publishes /pinky1/state
+Pinky publishes `/state`, bridged to RMF domain `/pinky1/state`
   state=navigating
   command_active=true
   active_command_id=rmf-001
 
 Pinky reaches goal
 
-Pinky publishes /pinky1/state
+Pinky publishes `/state`, bridged to RMF domain `/pinky1/state`
   state=idle
   command_active=false
   active_command_id=""
@@ -168,13 +170,13 @@ Pinky publishes /pinky1/state
 Stop:
 
 ```text
-RMF publishes /pinky1/command
+RMF publishes `/pinky1/command`, bridged to Pinky domain `/command`
   command_id=rmf-stop-001
   command_type=stop
 
 Pinky cancels current motion
 
-Pinky publishes /pinky1/state
+Pinky publishes `/state`, bridged to RMF domain `/pinky1/state`
   state=idle
   command_active=false
   last_command_id=rmf-stop-001
@@ -183,9 +185,9 @@ Pinky publishes /pinky1/state
 
 ## 구현 메모
 
-현재 코드는 RMF-facing 명령에 `Navigate` action과 `Stop` service를 사용한다. Domain bridge topic-only 구조로 바꾸려면 다음이 필요하다.
+Drive manager는 Pinky domain 내부에서 `/command`, `/state`를 사용한다. RMF domain의 `/pinky1/command`, `/pinky1/state` 같은 로봇별 topic은 domain bridge remap으로 연결한다.
 
-- `pinky_drive_msgs/msg/DriveCommand.msg` 추가
-- `DriveState.msg`에 command 결과 확인용 필드 추가 또는 기존 `active_request_id`를 `active_command_id` 용도로 재사용
-- `drive_manager_node.py`에서 `/command` subscriber 추가
-- `RobotClientAPI.py`에서 action/service client 대신 `/command` publisher와 `/state` subscriber 사용
+- `pinky_drive_msgs/msg/DriveCommand.msg` 사용
+- `DriveState.msg`의 `active_command_id`, `last_command_id`, `last_command_status`로 command 결과 확인
+- `drive_manager_node.py`는 `/command` subscriber와 `/state` publisher 제공
+- `RobotClientAPI.py`는 action/service client 대신 RMF domain의 로봇별 `/command` publisher와 `/state` subscriber 사용

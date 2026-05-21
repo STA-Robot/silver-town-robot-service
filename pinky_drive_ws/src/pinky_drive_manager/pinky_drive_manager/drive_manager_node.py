@@ -7,6 +7,10 @@ from typing import Any
 import rclpy
 import rclpy.executors
 import tf2_ros
+from action_msgs.msg import GoalStatus
+from geometry_msgs.msg import PoseStamped
+from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionClient
 from rclpy.time import Time
 import yaml
 from pinky_drive_msgs.msg import DriveCommand, DriveState
@@ -26,7 +30,6 @@ COMMAND_NAVIGATE = "navigate"
 COMMAND_RETURNING = "returning"
 COMMAND_FOLLOW = "follow"
 COMMAND_STOP = "stop"
-COMMAND_ARM = "arm"
 
 COMMAND_ACCEPTED = "accepted"
 COMMAND_SUCCEEDED = "succeeded"
@@ -45,11 +48,17 @@ class DriveManagerNode(Node):
         self.rmf_level = str(config.get("rmf_level", "L1"))
         self.map_frame = str(config.get("map_frame", "map"))
         self.robot_frame = str(config.get("robot_frame", "base_link"))
-        self.robot_namespace = str(config.get("robot_namespace", robot_name)).strip("/")
 
-        # topics
-        self.command_topic = self._resolve_robot_name("command")
-        self.state_topic = self._resolve_robot_name("state")
+        self.command_topic = str(config.get("command_topic", "/command"))
+        self.state_topic = str(config.get("state_topic", "/state"))
+        self.nav2_action = str(config.get("nav2_action", "/navigate_to_pose"))
+        self.battery_topic = str(
+            config.get("battery_percent_topic", "/battery/percent")
+        )
+        self.emergency_topic = str(config.get("emergency_topic", "/emergency"))
+        self.follow_event_topic = str(
+            config.get("follow_event_topic", "/internal/follow_event")
+        )
 
         self.state = STATE_UNKNOWN
         self.available = False
@@ -59,6 +68,8 @@ class DriveManagerNode(Node):
         self.last_command_id = ""
         self.last_command_status = ""
         self.message = ""
+        self.nav2_goal_handle = None
+        self.nav2_goal_command_id = ""
         self.pose = [0.0, 0.0, 0.0]
         self.battery_soc = math.nan
 
@@ -69,13 +80,6 @@ class DriveManagerNode(Node):
             f"command=[{self.command_topic}] state=[{self.state_topic}]"
         )
 
-    def _resolve_robot_name(self, name: str) -> str:
-        if name.startswith("/"):
-            return name
-        if not self.robot_namespace:
-            return name
-        return f"/{self.robot_namespace}/{name}"
-
     def _create_ros_interfaces(self) -> None:
         qos_depth = int(self.config.get("qos_depth", 10))
         state_publish_frequency = float(
@@ -85,6 +89,11 @@ class DriveManagerNode(Node):
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+        self.nav2_client = ActionClient(
+            self,
+            NavigateToPose,
+            self.nav2_action,
+        )
 
         self.command_sub = self.create_subscription(
             DriveCommand,
@@ -101,15 +110,13 @@ class DriveManagerNode(Node):
 
         self.battery_sub = self.create_subscription(
             Float32,
-            self._resolve_robot_name(
-                self.config.get("battery_percent_topic", "battery/percent")
-            ),
+            self.battery_topic,
             self._battery_callback,
             qos_depth,
         )
         self.emergency_sub = self.create_subscription(
             Bool,
-            self._resolve_robot_name(self.config.get("emergency_topic", "emergency")),
+            self.emergency_topic,
             self._emergency_callback,
             qos_depth,
         )
@@ -117,9 +124,7 @@ class DriveManagerNode(Node):
         # start, lost, done 등의 follower 내부 상태 이벤트
         self.follow_event_sub = self.create_subscription(
             String,
-            self._resolve_robot_name(
-                self.config.get("follow_event_topic", "internal/follow_event")
-            ),
+            self.follow_event_topic,
             self._follow_event_callback,
             qos_depth,
         )
@@ -147,8 +152,6 @@ class DriveManagerNode(Node):
             self._handle_follow_command(msg)
         elif msg.command_type == COMMAND_STOP:
             self._handle_stop_command(msg)
-        elif msg.command_type == COMMAND_ARM:
-            self._handle_arm_command(msg)
         else:
             self._reject_command(msg, f"unsupported command_type: {msg.command_type}")
 
@@ -200,12 +203,11 @@ class DriveManagerNode(Node):
 
     def _handle_stop_command(self, command: DriveCommand) -> None:
         self._cancel_motion()
-        self._finish_command(command.command_id, COMMAND_CANCELED, "motion stopped")
-
-    def _handle_arm_command(self, command: DriveCommand) -> None:
-        self._accept_command(command, STATE_IDLE)
         self._finish_command(
-            command.command_id, COMMAND_SUCCEEDED, "arm command accepted"
+            command.command_id,
+            COMMAND_CANCELED,
+            "motion stopped",
+            clear_active=True,
         )
 
     def _validate_command(self, command: DriveCommand) -> tuple[bool, str]:
@@ -235,6 +237,9 @@ class DriveManagerNode(Node):
         self.last_command_id = command.command_id
         self.last_command_status = COMMAND_ACCEPTED
         self._transition(state, f"accepted {command.command_type}")
+        self.get_logger().info(
+            f"[{self.robot_name}] accepted command [{command.command_id}]"
+        )
 
     def _reject_command(self, command: DriveCommand, message: str) -> None:
         # 거절 결과를 노드 상태로 기록 -> _publish_state()을 통해 상태값으로 응답 반환
@@ -245,20 +250,130 @@ class DriveManagerNode(Node):
             f"[{self.robot_name}] rejected command [{command.command_id}]: {message}"
         )
 
-    def _finish_command(self, command_id: str, status: str, message: str) -> None:
+    def _finish_command(
+        self,
+        command_id: str,
+        status: str,
+        message: str,
+        final_state: str = STATE_IDLE,
+        clear_active: bool = False,
+    ) -> None:
         self.last_command_id = command_id
         self.last_command_status = status
-        if not command_id or command_id == self.active_command_id:
+        if clear_active or not command_id or command_id == self.active_command_id:
             self.command_active = False
             self.active_command_id = ""
-        self._transition(STATE_IDLE, message)
+            self.nav2_goal_handle = None
+            self.nav2_goal_command_id = ""
+        self._transition(final_state, message)
 
     def _send_nav_goal(self, command: DriveCommand) -> None:
-        # TODO: Connect this to Nav2 NavigateToPose when the action contract is ready.
-        self.get_logger().info(
-            f"[{self.robot_name}] nav goal placeholder: "
-            f"x={command.x:.3f}, y={command.y:.3f}, yaw={command.yaw:.3f}"
+        if not self.nav2_client.wait_for_server(
+            timeout_sec=float(self.config.get("nav2_server_timeout", 2.0))
+        ):
+            self._finish_command(
+                command.command_id,
+                COMMAND_FAILED,
+                "Nav2 action server is not ready",
+                STATE_BLOCKED,
+            )
+            return
+
+        goal = NavigateToPose.Goal()
+        goal.pose = self._to_pose_stamped(command)
+        send_future = self.nav2_client.send_goal_async(
+            goal,
+            feedback_callback=lambda feedback: self._nav2_feedback_callback(
+                command.command_id, feedback
+            ),
         )
+        send_future.add_done_callback(
+            lambda future: self._nav2_goal_response_callback(
+                command.command_id, future
+            )
+        )
+
+    def _to_pose_stamped(self, command: DriveCommand) -> PoseStamped:
+        pose = PoseStamped()
+        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.header.frame_id = self.map_frame
+        pose.pose.position.x = float(command.x)
+        pose.pose.position.y = float(command.y)
+
+        half_yaw = float(command.yaw) * 0.5
+        pose.pose.orientation.z = math.sin(half_yaw)
+        pose.pose.orientation.w = math.cos(half_yaw)
+        return pose
+
+    def _nav2_feedback_callback(self, command_id: str, feedback_msg: Any) -> None:
+        if command_id != self.active_command_id:
+            return
+        # TODO: publish feedback msg info to RMF
+        distance = getattr(feedback_msg.feedback, "distance_remaining", math.nan)
+        if math.isfinite(float(distance)):
+            self.message = f"navigation distance remaining: {float(distance):.2f}m"
+
+    def _nav2_goal_response_callback(self, command_id: str, future: Any) -> None:
+        if command_id != self.active_command_id:
+            return
+
+        try:
+            goal_handle = future.result()
+        except Exception as err:
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                f"Nav2 goal send failed: {err}",
+                STATE_BLOCKED,
+            )
+            self._publish_state()
+            return
+
+        if not goal_handle.accepted:
+            self._finish_command(
+                command_id, COMMAND_REJECTED, "Nav2 rejected goal", STATE_BLOCKED
+            )
+            self._publish_state()
+            return
+
+        self.nav2_goal_handle = goal_handle
+        self.nav2_goal_command_id = command_id
+        self.message = "Nav2 accepted goal"
+        self._publish_state()
+
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(
+            lambda result: self._nav2_result_callback(command_id, result)
+        )
+
+    def _nav2_result_callback(self, command_id: str, future: Any) -> None:
+        if command_id != self.active_command_id:
+            return
+
+        try:
+            result = future.result()
+        except Exception as err:
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                f"Nav2 result failed: {err}",
+                STATE_BLOCKED,
+            )
+            self._publish_state()
+            return
+
+        if result.status == GoalStatus.STATUS_SUCCEEDED:
+            self._finish_command(command_id, COMMAND_SUCCEEDED, "navigation succeeded")
+        elif result.status == GoalStatus.STATUS_CANCELED:
+            self._finish_command(command_id, COMMAND_CANCELED, "navigation canceled")
+        else:
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                f"navigation failed with status {result.status}",
+                STATE_BLOCKED,
+            )
+        self._publish_state()
 
     def _start_follow(self, command: DriveCommand) -> None:
         # TODO: Send a start request to the follower/person-tracking node.
@@ -268,7 +383,14 @@ class DriveManagerNode(Node):
         )
 
     def _cancel_motion(self) -> None:
-        # TODO: Cancel the active Nav2 goal or stop the follower node.
+        if self.nav2_goal_handle is not None:
+            self.nav2_goal_handle.cancel_goal_async()
+            self.nav2_goal_handle = None
+            self.nav2_goal_command_id = ""
+            self.message = "Nav2 cancel requested"
+            return
+
+        # TODO: Stop the follower/person-tracking node when follow integration is added.
         if self.command_active:
             self.get_logger().info(
                 f"[{self.robot_name}] cancel motion placeholder: {self.active_command_id}"
@@ -320,11 +442,12 @@ class DriveManagerNode(Node):
             msg.battery_soc = 1.0
 
         msg.state = self.state
-        msg.nav2_state = self.last_command_status
         msg.available = self.available
         msg.emergency = self.emergency
         msg.command_active = self.command_active
-        msg.active_request_id = self.active_command_id
+        msg.active_command_id = self.active_command_id
+        msg.last_command_id = self.last_command_id
+        msg.last_command_status = self.last_command_status
         msg.message = self.message
         return msg
 
@@ -393,15 +516,12 @@ def main(argv=sys.argv):
     )
     parser.add_argument("--config-file", required=True)
     parser.add_argument("--robot-name", required=True)
-    parser.add_argument("--robot-namespace", default="")
     parser.add_argument("--rmf-level", default="")
     args, _ = parser.parse_known_args(argv[1:])
 
     rclpy.init(args=argv)
 
     config = _load_config(args.config_file, args.robot_name)
-    if args.robot_namespace:
-        config["robot_namespace"] = args.robot_namespace
     if args.rmf_level:
         config["rmf_level"] = args.rmf_level
 

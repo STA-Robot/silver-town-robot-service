@@ -10,7 +10,7 @@
 
 ```text
 src/
-  pinky_drive_msgs/          # RMF <-> Pinky drive interface msg/action/srv
+  pinky_drive_msgs/          # RMF <-> Pinky drive interface msg
   pinky_drive_manager/       # 현재 사용 패키지
   pinky_drive_manager_old/   # 과거 PoC 참조 코드, COLCON_IGNORE 처리됨
 ```
@@ -64,69 +64,88 @@ source install/setup.bash
 
 ## 실행 전 확인 사항
 
-drive manager는 RMF-facing API만 제공하고, 실제 이동은 각 로봇 namespace의
-Nav2로 위임한다. 기본 설정에서는 `pinky1` 기준 아래 리소스를 기대한다.
+drive manager는 각 Pinky의 `ROS_DOMAIN_ID` 안에서 실행된다. 로봇 구분은 ROS
+namespace가 아니라 domain bridge remap으로 처리한다. 따라서 Pinky domain 내부에서
+기본 리소스 이름은 아래처럼 단순하다.
 
 | 항목 | 기본 이름 |
 |---|---|
-| Drive API namespace | `/pinky1/drive` |
-| Nav2 action | `/pinky1/navigate_to_pose` |
-| TF | `map -> pinky1/base_link` |
-| Battery topic | `/pinky1/battery/percent` |
-| Emergency topic | `/pinky1/emergency` |
-| Follow event topic | `/pinky1/drive/internal/follow_event` |
+| Command topic | `/command` |
+| State topic | `/state` |
+| Nav2 action | `/navigate_to_pose` |
+| TF | `map -> base_link` |
+| Battery topic | `/battery/percent` |
+| Emergency topic | `/emergency` |
+| Follow event topic | `/internal/follow_event` |
 
-Nav2와 TF가 준비되지 않으면 drive manager는 `unknown` 상태를 publish한다.
+RMF domain에서는 domain bridge가 로봇별 topic으로 remap한다.
+
+```text
+RMF domain 31:     /pinky1/command  ->  pinky1 domain 32: /command
+RMF domain 31:     /pinky1/state    <-  pinky1 domain 32: /state
+RMF domain 31:     /pinky2/command  ->  pinky2 domain 33: /command
+RMF domain 31:     /pinky2/state    <-  pinky2 domain 33: /state
+```
+
+Nav2와 TF가 준비되어 있는지 Pinky domain에서 확인한다.
 
 ```bash
-ros2 action list | grep navigate_to_pose
-ros2 run tf2_ros tf2_echo map pinky1/base_link
+ROS_DOMAIN_ID=32 ros2 action list | grep /navigate_to_pose
+ROS_DOMAIN_ID=32 ros2 run tf2_ros tf2_echo map base_link
 ```
 
 ## 단일 로봇 실행
 
+각 Pinky domain에서 drive manager를 하나씩 실행한다.
+
+pinky1:
+
 ```bash
-ros2 launch pinky_drive_manager drive_manager.launch.py \
+cd pinky_drive_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+
+ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
   robot_name:=pinky1 \
-  drive_namespace:=/pinky1/drive \
-  robot_namespace:=pinky1 \
+  rmf_level:=L1
+```
+
+pinky2:
+
+```bash
+cd pinky_drive_ws
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+
+ROS_DOMAIN_ID=33 ros2 launch pinky_drive_manager drive_manager.launch.py \
+  robot_name:=pinky2 \
   rmf_level:=L1
 ```
 
 시뮬레이션 시간을 쓰는 경우:
 
 ```bash
-ros2 launch pinky_drive_manager drive_manager.launch.py \
+ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
   robot_name:=pinky1 \
-  drive_namespace:=/pinky1/drive \
-  robot_namespace:=pinky1 \
   rmf_level:=L1 \
   use_sim_time:=true
 ```
 
 ## 멀티로봇 실행
 
-기본 예시는 `pinky1`, `pinky2` 두 대를 실행한다.
+기본 domain bridge 구조에서는 `multi_drive_manager.launch.py`를 사용하지 않는 것을
+권장한다. drive manager가 `/command`, `/state` 같은 절대 topic을 쓰기 때문에 같은
+`ROS_DOMAIN_ID` 안에서 여러 drive manager를 띄우면 topic이 충돌할 수 있다.
+
+디버그 목적으로 같은 domain에 여러 노드를 띄워야 할 때만 사용한다.
 
 ```bash
-ros2 launch pinky_drive_manager multi_drive_manager.launch.py \
+ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager multi_drive_manager.launch.py \
   robot_names:=pinky1,pinky2 \
-  drive_namespace_format:="/{robot_name}/drive" \
-  robot_namespace_format:="{robot_name}" \
   rmf_level:=L1
 ```
 
-이렇게 실행하면 RMF-facing API는 다음처럼 생성된다.
-
-```text
-/pinky1/drive/state
-/pinky1/drive/navigate
-/pinky1/drive/stop
-
-/pinky2/drive/state
-/pinky2/drive/navigate
-/pinky2/drive/stop
-```
+실제 멀티로봇 운용은 각 로봇을 별도 domain에서 단일 launch로 실행한다.
 
 ## 설정 파일
 
@@ -142,109 +161,116 @@ src/pinky_drive_manager/config/pinky_drive_manager.yaml
 |---|---|
 | `rmf_level` | RMF map/level 이름. 기본 `L1` |
 | `map_frame` | pose 기준 map frame. 기본 `map` |
-| `robot_frame` | 로봇 base frame. 기본 `{robot_name}/base_link` |
-| `robot_namespace` | Nav2, battery, emergency가 있는 로봇 namespace |
-| `nav2_action` | robot namespace 아래 Nav2 action 이름 |
+| `robot_frame` | 로봇 base frame. 기본 `base_link` |
+| `command_topic` | RMF command를 받는 Pinky domain 내부 topic. 기본 `/command` |
+| `state_topic` | drive state를 publish하는 Pinky domain 내부 topic. 기본 `/state` |
+| `nav2_action` | Pinky domain 내부 Nav2 action 이름. 기본 `/navigate_to_pose` |
 | `battery_percent_topic` | battery SOC topic. `0.0~1.0` 또는 `0~100` 허용 |
 | `emergency_topic` | emergency input topic |
-| `follow_event_topic` | 추후 follower 노드가 상태 전이를 요청할 내부 topic |
-| `allow_blocked_retry` | `blocked` 상태에서 RMF retry navigation 허용 여부 |
-| `state_publish_frequency` | `/drive/state` publish 주기 |
+| `follow_event_topic` | follower 노드가 상태 전이를 알려주는 내부 topic |
+| `state_publish_frequency` | `/state` publish 주기 |
 
 패키지 설치 후 다른 config를 쓰려면:
 
 ```bash
-ros2 launch pinky_drive_manager multi_drive_manager.launch.py \
+ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
   config_file:=/path/to/pinky_drive_manager.yaml \
-  robot_names:=pinky1,pinky2
+  robot_name:=pinky1
 ```
 
 ## 동작 확인 명령
 
+아래 명령은 Pinky domain 내부에서 직접 테스트하는 예시다. RMF domain에서 테스트할
+때는 domain bridge remap 이후의 `/pinky1/command`, `/pinky1/state`를 사용한다.
+
 상태 확인:
 
 ```bash
-ros2 topic echo /pinky1/drive/state
+ROS_DOMAIN_ID=32 ros2 topic echo /state
 ```
 
-navigation goal 전송:
+navigation command 전송:
 
 ```bash
-ros2 action send_goal /pinky1/drive/navigate pinky_drive_msgs/action/Navigate \
-  "{robot_name: 'pinky1', map_name: 'L1', x: 1.0, y: 2.0, yaw: 0.0, speed_limit: 0.0, request_id: 'manual-test-001', destination_name: 'test', command_mode: 'task'}" \
-  --feedback
+ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+  "{robot_name: 'pinky1', command_id: 'manual-nav-001', command_type: 'navigate', map_name: 'L1', x: 1.0, y: 2.0, yaw: 0.0, speed_limit: 0.0, target_name: 'test', payload_json: ''}"
 ```
 
-returning goal 전송:
+returning command 전송:
 
 ```bash
-ros2 action send_goal /pinky1/drive/navigate pinky_drive_msgs/action/Navigate \
-  "{robot_name: 'pinky1', map_name: 'L1', x: 0.0, y: 0.0, yaw: 0.0, speed_limit: 0.0, request_id: 'manual-return-001', destination_name: 'home', command_mode: 'returning'}" \
-  --feedback
+ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+  "{robot_name: 'pinky1', command_id: 'manual-return-001', command_type: 'returning', map_name: 'L1', x: 0.0, y: 0.0, yaw: 0.0, speed_limit: 0.0, target_name: 'home', payload_json: ''}"
+```
+
+follow command 전송:
+
+```bash
+ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+  "{robot_name: 'pinky1', command_id: 'manual-follow-001', command_type: 'follow', map_name: 'L1', target_name: 'person', payload_json: ''}"
 ```
 
 정지:
 
 ```bash
-ros2 service call /pinky1/drive/stop pinky_drive_msgs/srv/Stop \
-  "{robot_name: 'pinky1', request_id: 'manual-stop-001'}"
+ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+  "{robot_name: 'pinky1', command_id: 'manual-stop-001', command_type: 'stop', map_name: 'L1'}"
 ```
 
 emergency on/off 테스트:
 
 ```bash
-ros2 topic pub --once /pinky1/emergency std_msgs/msg/Bool "{data: true}"
-ros2 topic pub --once /pinky1/emergency std_msgs/msg/Bool "{data: false}"
+ROS_DOMAIN_ID=32 ros2 topic pub --once /emergency std_msgs/msg/Bool "{data: true}"
+ROS_DOMAIN_ID=32 ros2 topic pub --once /emergency std_msgs/msg/Bool "{data: false}"
 ```
 
-following 상태 전이 테스트:
+following 상태 이벤트 테스트:
 
 ```bash
-ros2 topic pub --once /pinky1/drive/internal/follow_event std_msgs/msg/String \
-  "{data: 'follow_start'}"
+ROS_DOMAIN_ID=32 ros2 topic pub --once /internal/follow_event std_msgs/msg/String \
+  "{data: 'start'}"
 
-ros2 topic pub --once /pinky1/drive/internal/follow_event std_msgs/msg/String \
-  "{data: 'target_lost_timeout'}"
+ROS_DOMAIN_ID=32 ros2 topic pub --once /internal/follow_event std_msgs/msg/String \
+  "{data: 'blocked'}"
 
-ros2 topic pub --once /pinky1/drive/internal/follow_event std_msgs/msg/String \
-  "{data: 'follow_stop'}"
+ROS_DOMAIN_ID=32 ros2 topic pub --once /internal/follow_event std_msgs/msg/String \
+  "{data: 'done'}"
 ```
 
 ## RMF-facing 인터페이스
 
-각 로봇은 아래 namespace를 제공한다.
+Pinky domain 내부 drive manager는 `/command`, `/state`만 제공한다. RMF domain에서는
+domain bridge remap을 통해 로봇별 topic으로 보이게 한다.
 
-```text
-/{robot_name}/drive
-```
-
-| 인터페이스 | 타입 |
-|---|---|
-| `/{robot_name}/drive/state` | `pinky_drive_msgs/msg/DriveState` |
-| `/{robot_name}/drive/navigate` | `pinky_drive_msgs/action/Navigate` |
-| `/{robot_name}/drive/stop` | `pinky_drive_msgs/srv/Stop` |
+| RMF domain topic | Pinky domain topic | 타입 |
+|---|---|---|
+| `/pinky1/command` | `/command` | `pinky_drive_msgs/msg/DriveCommand` |
+| `/pinky1/state` | `/state` | `pinky_drive_msgs/msg/DriveState` |
+| `/pinky2/command` | `/command` | `pinky_drive_msgs/msg/DriveCommand` |
+| `/pinky2/state` | `/state` | `pinky_drive_msgs/msg/DriveState` |
 
 자세한 계약은 [docs/rmf_pinky_drive_interface.md](../docs/rmf_pinky_drive_interface.md)를
 참고한다.
 
 ## 문제 확인 포인트
 
-`state == unknown`이 계속 유지되면 아래를 확인한다.
+`state == unknown`이 계속 유지되면 Pinky domain에서 아래를 확인한다.
 
 ```bash
-ros2 action list | grep /pinky1/navigate_to_pose
-ros2 run tf2_ros tf2_echo map pinky1/base_link
-ros2 topic echo /pinky1/drive/state
+ROS_DOMAIN_ID=32 ros2 action list | grep /navigate_to_pose
+ROS_DOMAIN_ID=32 ros2 run tf2_ros tf2_echo map base_link
+ROS_DOMAIN_ID=32 ros2 topic echo /state
 ```
 
-`Navigate` goal이 reject되면 보통 아래 중 하나다.
+command가 `rejected`가 되면 보통 아래 중 하나다.
 
 - `robot_name` 또는 `map_name` 불일치
-- `request_id` 누락
-- Nav2 action server 미준비
-- TF 미준비
-- 현재 상태가 `navigating`, `following`, `emergency`, `unknown`
+- `command_id` 누락
+- emergency 상태에서 `navigate`, `returning`, `follow` 요청
+- 다른 command가 이미 active 상태
+- 현재 `returning`이 아닌 motion 중 새 일반 command 요청
 
-MVP 단계에서는 Nav2 실패와 goal reject를 public state `blocked`로 매핑한다. 정밀주차,
-YOLO 기반 사람 추종, follower stop service 연동은 이후 노드가 추가될 때
+Nav2 action server가 준비되지 않았거나 Nav2가 goal을 실패시키면 public state는
+`blocked`가 되고, `last_command_status`는 `failed` 또는 `rejected`로 publish된다.
+정밀주차, YOLO 기반 사람 추종, follower stop 연동은 이후 노드가 추가될 때
 `drive_manager_node.py`의 TODO 지점에 연결한다.

@@ -2,7 +2,7 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -16,12 +16,6 @@ def _launch_nodes(context, *args, **kwargs):
 
     config_file = LaunchConfiguration("config_file").perform(context)
     robot_names_arg = LaunchConfiguration("robot_names").perform(context)
-    drive_namespace_format = LaunchConfiguration("drive_namespace_format").perform(
-        context
-    )
-    robot_namespace_format = LaunchConfiguration("robot_namespace_format").perform(
-        context
-    )
     rmf_level = LaunchConfiguration("rmf_level").perform(context)
     use_sim_time = LaunchConfiguration("use_sim_time").perform(context)
 
@@ -31,30 +25,33 @@ def _launch_nodes(context, *args, **kwargs):
         if robot_name.strip()
     ]
 
-    nodes = []
-    for robot_name in robot_names:
-        drive_namespace = drive_namespace_format.format(robot_name=robot_name)
-        robot_namespace = robot_namespace_format.format(robot_name=robot_name)
+    actions = [
+        LogInfo(
+            msg=(
+                "multi_drive_manager.launch.py는 같은 ROS_DOMAIN_ID 안에서 "
+                "여러 drive_manager를 디버그할 때만 사용하세요. 기본 domain bridge "
+                "구조에서는 각 Pinky domain에서 drive_manager.launch.py를 하나씩 실행합니다."
+            )
+        )
+    ]
 
+    for robot_name in robot_names:
         node_args = ["--config-file", config_file, "--robot-name", robot_name]
-        if robot_namespace:
-            node_args.extend(["--robot-namespace", robot_namespace])
         if rmf_level:
             node_args.extend(["--rmf-level", rmf_level])
 
-        nodes.append(
+        actions.append(
             Node(
                 package="pinky_drive_manager",
                 executable="drive_manager_node",
-                name="drive_manager",
-                namespace=drive_namespace,
+                name=f"drive_manager_{robot_name}",
                 output="screen",
                 arguments=node_args,
                 parameters=[{"use_sim_time": _as_bool(use_sim_time)}],
             )
         )
 
-    return nodes
+    return actions
 
 
 def generate_launch_description():
@@ -65,12 +62,6 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("config_file", default_value=default_config),
             DeclareLaunchArgument("robot_names", default_value="pinky1,pinky2"),
-            DeclareLaunchArgument(
-                "drive_namespace_format", default_value="/{robot_name}/drive"
-            ),
-            DeclareLaunchArgument(
-                "robot_namespace_format", default_value="{robot_name}"
-            ),
             DeclareLaunchArgument("rmf_level", default_value=""),
             DeclareLaunchArgument("use_sim_time", default_value="false"),
             OpaqueFunction(function=_launch_nodes),
