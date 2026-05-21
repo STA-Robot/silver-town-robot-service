@@ -375,8 +375,8 @@ class DriveManagerNode(Node):
             )
         self._publish_state()
 
+    # TODO: follower/person-tracking 노드에 사람 추종 시작 요청을 연결한다.
     def _start_follow(self, command: DriveCommand) -> None:
-        # TODO: Send a start request to the follower/person-tracking node.
         self.get_logger().info(
             f"[{self.robot_name}] follow start placeholder: "
             f"target=[{command.target_name}]"
