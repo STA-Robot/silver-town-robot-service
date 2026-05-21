@@ -4,7 +4,9 @@
 adapter 설정과 adapter 코드를 담는다.
 
 실제 로봇 drive API는 `../pinky_drive_ws`의 `pinky_drive_manager`가 제공하고,
-이 workspace의 adapter는 RMF 명령을 각 로봇의 `/pinkyX/drive/*` API로 연결한다.
+이 workspace의 adapter는 RMF domain에서 보이는 `/pinkyX/command`, `/pinkyX/state`
+topic으로 각 로봇과 통신한다. Pinky local domain의 `/command`, `/state`와 RMF
+domain의 로봇별 topic은 `domain_bridge`가 remap한다.
 
 ## 디렉토리 구조
 
@@ -27,7 +29,10 @@ rmf_ws/
     pinky_rmf_adapter/
       config/
         pinky_adapter.yaml           # fleet, robot, coordinate transform 설정
+        pinky1_domain_bridge.yaml      # RMF domain 31 <-> pinky1 domain 32 bridge
+        pinky2_domain_bridge.yaml      # RMF domain 31 <-> pinky2 domain 33 bridge
       launch/
+        pinky_domain_bridges.launch.py
         pinky_fleet_adapter.launch.py
       pinky_rmf_adapter/
         fleet_adapter.py             # Open-RMF fleet adapter template
@@ -98,10 +103,9 @@ python3 src/site_config/site_config/generate_configs.py
 ```
 
 generator는 필수 값이 없으면 조용히 기본값을 넣지 않고 에러를 낸다. 예를 들어
-각 robot에는 `rmf_level`, `charger`, `drive_namespace`가 반드시 있어야 한다.
-`fleet.robots.<robot_name>` 아래에 추가한 robot 특성은 `rmf_level`,
-`drive_namespace`, `drive_api`를 제외하고 generated `pinky_adapter.yaml`의
-`rmf_fleet.robots.<robot_name>` 아래로 보존된다.
+각 robot에는 `rmf_level`, `charger`, RMF domain에서 보이는 `command_topic`,
+`state_topic`이 필요하다. `fleet.robots.<robot_name>` 아래에 추가한 robot 특성은
+generated `pinky_adapter.yaml`의 `rmf_fleet.robots.<robot_name>` 아래로 보존된다.
 
 ## YAML 파일 위치
 
@@ -147,15 +151,84 @@ source install/setup.bash
 
 ## 실행 흐름
 
-1. 각 Pinky의 Nav2와 `pinky_drive_manager`를 실행한다.
-2. `/pinky1/drive/state`, `/pinky1/drive/navigate`, `/pinky1/drive/stop`이 보이는지 확인한다.
+1. 각 Pinky local domain에서 Nav2와 `pinky_drive_manager`를 실행한다.
+   - pinky1 예: `ROS_DOMAIN_ID=32`
+   - pinky2 예: `ROS_DOMAIN_ID=33`
+2. RMF domain에서 domain bridge를 실행한다.
 3. RMF core와 schedule/task 관련 노드가 준비된 상태에서 fleet adapter와 task orchestrator를 실행한다.
+
+### Domain Bridge
+
+기본 domain 배치는 아래를 가정한다.
+
+| 대상 | ROS_DOMAIN_ID | local topic | RMF domain topic |
+|---|---:|---|---|
+| RMF | 31 | - | - |
+| pinky1 | 32 | `/command`, `/state` | `/pinky1/command`, `/pinky1/state` |
+| pinky2 | 33 | `/command`, `/state` | `/pinky2/command`, `/pinky2/state` |
+
+bridge 설정 파일은 `pinky_rmf_adapter/config`에 있다.
+
+| 파일 | 의미 |
+|---|---|
+| `pinky1_domain_bridge.yaml` | RMF domain 31과 pinky1 domain 32 연결 |
+| `pinky2_domain_bridge.yaml` | RMF domain 31과 pinky2 domain 33 연결 |
+
+`reversed: true`는 bridge 방향을 뒤집는다. 예를 들어 pinky1 설정에서:
+
+```yaml
+from_domain: 31
+to_domain: 32
+
+topics:
+  pinky1/command:
+    type: pinky_drive_msgs/msg/DriveCommand
+    remap: command
+
+  state:
+    type: pinky_drive_msgs/msg/DriveState
+    remap: pinky1/state
+    reversed: true
+```
+
+의미는 아래와 같다.
+
+```text
+31 /pinky1/command -> 32 /command
+32 /state          -> 31 /pinky1/state
+```
+
+bridge launch 사용법:
+
+```bash
+cd rmf_ws
+source ../pinky_drive_ws/install/setup.bash
+source install/setup.bash
+
+ros2 launch pinky_rmf_adapter pinky_domain_bridges.launch.py
+```
+
+개별 설정 파일로 직접 실행할 수도 있다.
+
+```bash
+ros2 run domain_bridge domain_bridge \
+  src/pinky_rmf_adapter/config/pinky1_domain_bridge.yaml
+
+ros2 run domain_bridge domain_bridge \
+  src/pinky_rmf_adapter/config/pinky2_domain_bridge.yaml
+```
+
+bridge 확인:
+
+```bash
+ROS_DOMAIN_ID=31 ros2 topic list | grep pinky
+ROS_DOMAIN_ID=31 ros2 topic echo /pinky1/state
+```
 
 `pinky_rmf_adapter`에는 Open-RMF
 [`fleet_adapter_template`](https://github.com/open-rmf/fleet_adapter_template/tree/main/fleet_adapter_template/fleet_adapter_template)
-의 기본 템플릿 코드가 들어 있다. 아직 `RobotClientAPI.py`의 로봇별 API 함수들은
-템플릿 TODO 상태이므로, 다음 단계에서 Pinky drive manager의 ROS 2
-topic/action/service로 연결해야 한다.
+의 기본 템플릿 코드가 들어 있다. `RobotClientAPI.py`는 다음 단계에서
+`/pinkyX/command` publisher와 `/pinkyX/state` subscriber를 사용하도록 연결한다.
 
 아래 launch를 실행 진입점으로 사용한다.
 
@@ -202,9 +275,10 @@ adapter 구현 시 우선 연결할 인터페이스:
 
 | RMF adapter 쪽 | Pinky drive manager 쪽 |
 |---|---|
-| robot state polling/update | `/{robot_name}/drive/state` subscribe |
-| navigation command | `/{robot_name}/drive/navigate` action client |
-| stop/cancel command | `/{robot_name}/drive/stop` service client |
+| robot state polling/update | RMF domain `/{robot_name}/state` subscribe |
+| navigation command | RMF domain `/{robot_name}/command` publish, `command_type=navigate` |
+| returning command | RMF domain `/{robot_name}/command` publish, `command_type=returning` |
+| stop/cancel command | RMF domain `/{robot_name}/command` publish, `command_type=stop` |
 
 좌표 변환은 `pinky_adapter.yaml`의 `reference_coordinates`를 기준으로 처리한다.
 RMF level 이름은 현재 `L1`이다.

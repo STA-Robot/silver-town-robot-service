@@ -40,32 +40,27 @@ rmf_fleet:
   robot_state_update_frequency: 10.0
 
 fleet_manager:
-  # Template RobotAPI placeholders. Replace these when RobotAPI is wired to
-  # Pinky's ROS 2 drive API instead of the original HTTP-style template.
+  # RMF domain에서 보이는 topic 이름이다.
+  # 각 Pinky local domain의 /command, /state는 domain bridge remap으로
+  # /pinky1/command, /pinky1/state처럼 로봇별 topic으로 연결한다.
   prefix: ""
   user: ""
   password: ""
   robots:
     pinky1:
       rmf_level: L1
-      drive_namespace: /pinky1/drive
-      navigate_action: navigate
-      stop_service: stop
-      state_topic: state
+      command_topic: /pinky1/command
+      state_topic: /pinky1/state
       state_timeout: 2.0
-      action_server_timeout: 2.0
-      stop_service_timeout: 2.0
-      goal_acceptance_timeout: 5.0
+      command_accept_timeout: 2.0
+      command_finish_timeout: 300.0
     pinky2:
       rmf_level: L1
-      drive_namespace: /pinky2/drive
-      navigate_action: navigate
-      stop_service: stop
-      state_topic: state
+      command_topic: /pinky2/command
+      state_topic: /pinky2/state
       state_timeout: 2.0
-      action_server_timeout: 2.0
-      stop_service_timeout: 2.0
-      goal_acceptance_timeout: 5.0
+      command_accept_timeout: 2.0
+      command_finish_timeout: 300.0
 
 reference_coordinates:
   L1:

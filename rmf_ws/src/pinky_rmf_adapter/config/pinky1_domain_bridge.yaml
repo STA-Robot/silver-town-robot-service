@@ -1,0 +1,16 @@
+# RMF domain 31 <-> pinky1 local domain 32
+# RMF /pinky1/command -> pinky1 /command
+# pinky1 /state -> RMF /pinky1/state
+name: pinky1_domain_bridge
+from_domain: 31
+to_domain: 32
+
+topics:
+  pinky1/command:
+    type: pinky_drive_msgs/msg/DriveCommand
+    remap: command
+
+  state:
+    type: pinky_drive_msgs/msg/DriveState
+    remap: pinky1/state
+    reversed: true
