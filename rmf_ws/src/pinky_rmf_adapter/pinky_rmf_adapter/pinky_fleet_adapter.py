@@ -119,10 +119,11 @@ def main(argv=sys.argv):
         fleet_config.add_robot_coordinates_transformation(level, tf)
 
     fleet_handle = adapter.add_easy_fleet(fleet_config)
+    _register_performable_actions(fleet_handle, node)
 
     # Initialize robot API for this fleet
     fleet_mgr_yaml = config_yaml['fleet_manager']
-    api = RobotAPI(fleet_mgr_yaml)
+    api = RobotAPI(fleet_mgr_yaml, node)
 
     robots = {}
     for robot_name in fleet_config.known_robots:
@@ -185,12 +186,13 @@ class RobotAdapter:
         self.node = node
         self.api = api
         self.fleet_handle = fleet_handle
+        self.action_timers = {}
 
     def update(self, state):
         activity_identifier = None
         execution = self.execution
         if execution:
-            if self.api.is_command_completed():
+            if self.api.is_command_completed(self.name):
                 execution.finished()
                 self.execution = None
             else:
@@ -260,10 +262,50 @@ class RobotAdapter:
         You may wish to use RobotAPI.start_activity to trigger different
         types of actions to your robot.'''
         self.execution = execution
-        # ------------------------ #
-        # IMPLEMENT YOUR CODE HERE #
-        # ------------------------ #
+        if category == "wait_at_table":
+            seconds = float(description.get("seconds", 0.0))
+            self.node.get_logger().info(
+                f'Commanding [{self.name}] to wait at table for {seconds:.1f}s'
+            )
+            self._finish_action_after_delay(execution, max(seconds, 0.001))
+            return
+
+        self.node.get_logger().warn(
+            f'Unsupported action [{category}] for [{self.name}]'
+        )
+        # TODO: Decide whether unknown actions should fail, replan, or finish.
         return
+
+    def _finish_action_after_delay(self, execution, seconds: float):
+        timer_key = id(execution)
+        timer_ref = {}
+
+        def finish_action():
+            timer = timer_ref["timer"]
+            timer.cancel()
+            self.node.destroy_timer(timer)
+            self.action_timers.pop(timer_key, None)
+            execution.finished()
+            if self.execution is execution:
+                self.execution = None
+
+        timer = self.node.create_timer(seconds, finish_action)
+        timer_ref["timer"] = timer
+        self.action_timers[timer_key] = timer
+
+
+def _register_performable_actions(fleet_handle, node):
+    more = fleet_handle.more()
+    if more is None:
+        # TODO: Decide how startup should fail when the underlying fleet handle is unavailable.
+        return
+
+    consider_all = rmf_adapter.consider_all()
+    more.consider_composed_requests(consider_all)
+    more.add_performable_action("wait_at_table", consider_all)
+    node.get_logger().info(
+        'Registered performable action [wait_at_table] for compose tasks'
+    )
 
 
 # Parallel processing solution derived from

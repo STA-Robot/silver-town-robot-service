@@ -15,7 +15,7 @@ setup(
         ("share/" + package_name + "/config", glob("config/*.yaml")),
         ("share/" + package_name + "/launch", glob("launch/*.py")),
     ],
-    install_requires=["setuptools"],
+    install_requires=["setuptools", "nudged"],
     zip_safe=True,
     maintainer="ane",
     maintainer_email="ane@example.com",
@@ -24,8 +24,9 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "fleet_adapter = pinky_rmf_adapter.fleet_adapter:main",
-            "pinky_fleet_adapter = pinky_rmf_adapter.fleet_adapter:main",
+            "fleet_adapter = pinky_rmf_adapter.pinky_fleet_adapter:main",
+            "pinky_fleet_adapter = pinky_rmf_adapter.pinky_fleet_adapter:main",
+            "pinky_task_orchestrator = pinky_rmf_adapter.pinky_task_orchestrator:main",
         ],
     },
 )
