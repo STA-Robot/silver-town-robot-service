@@ -254,16 +254,14 @@ class RobotAdapter:
         execution = self.execution
         if execution is not None:
             if execution.identifier.is_same(activity):
+                self._cancel_action_timer(execution)
                 self.execution = None
                 self.api.stop(self.name)
 
     def execute_action(self, category: str, description: dict, execution):
-        ''' Trigger a custom action you would like your robot to perform.
-        You may wish to use RobotAPI.start_activity to trigger different
-        types of actions to your robot.'''
         self.execution = execution
         if category == "wait_at_table":
-            seconds = float(description.get("seconds", 0.0))
+            seconds = self._wait_seconds_from_description(description)
             self.node.get_logger().info(
                 f'Commanding [{self.name}] to wait at table for {seconds:.1f}s'
             )
@@ -276,15 +274,39 @@ class RobotAdapter:
         # TODO: Decide whether unknown actions should fail, replan, or finish.
         return
 
+    def _wait_seconds_from_description(self, description) -> float:
+        if not isinstance(description, dict):
+            return 0.0
+
+        value = description.get("seconds")
+        if value is None and isinstance(description.get("description"), dict):
+            value = description["description"].get("seconds")
+
+        try:
+            return float(value or 0.0)
+        except (TypeError, ValueError):
+            self.node.get_logger().warn(
+                f'Invalid wait_at_table seconds for [{self.name}]: {value}'
+            )
+            return 0.0
+
+    def _cancel_action_timer(self, execution):
+        timer = self.action_timers.pop(id(execution), None)
+        if timer is None:
+            return
+
+        timer.cancel()
+        self.node.destroy_timer(timer)
+
     def _finish_action_after_delay(self, execution, seconds: float):
         timer_key = id(execution)
         timer_ref = {}
 
         def finish_action():
-            timer = timer_ref["timer"]
-            timer.cancel()
-            self.node.destroy_timer(timer)
-            self.action_timers.pop(timer_key, None)
+            timer_ref["timer"].cancel()
+            self.node.destroy_timer(timer_ref["timer"])
+            if self.action_timers.pop(timer_key, None) is None:
+                return
             execution.finished()
             if self.execution is execution:
                 self.execution = None

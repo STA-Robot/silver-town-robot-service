@@ -13,6 +13,9 @@
   <exec_depend>pinky_task_orchestrator</exec_depend>
   <exec_depend>pinky_rmf_adapter</exec_depend>
   <exec_depend>pinky_rmf_maps</exec_depend>
+  <exec_depend>rmf_building_map_tools</exec_depend>
+  <exec_depend>rmf_task_ros2</exec_depend>
+  <exec_depend>rmf_traffic_ros2</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

@@ -1,0 +1,7 @@
+string table_id
+string table_waypoint
+uint32 wait_seconds
+---
+bool accepted
+string mission_id
+string message

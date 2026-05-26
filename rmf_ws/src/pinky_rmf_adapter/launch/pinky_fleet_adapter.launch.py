@@ -30,7 +30,6 @@ def _launch_adapter(context, *args, **kwargs):
         Node(
             package="pinky_rmf_adapter",
             executable="pinky_fleet_adapter",
-            name="pinky_fleet_adapter",
             output="screen",
             arguments=cli_args,
         )

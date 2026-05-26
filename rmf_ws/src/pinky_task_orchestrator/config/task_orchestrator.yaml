@@ -1,0 +1,7 @@
+fleet_name: pinky
+task_api_transport: auto
+task_api_service: /task_api_service
+task_api_request_topic: task_api_requests
+task_api_response_topic: task_api_responses
+default_wait_seconds: 20
+warehouse_waypoint: warehouse
