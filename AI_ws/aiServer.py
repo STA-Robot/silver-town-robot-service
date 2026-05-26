@@ -26,8 +26,8 @@ S_BINS            = 32     # Saturation 히스토그램 bins
 TORSO_RATIO       = (0.15, 0.65)  # 박스 높이 기준 상체 영역 (상단 15%~65%)
 
 
-#  ──모델 로드  (YOLOv8n → 내장 ReID 임베딩 추출 가능)──
-model = YOLO("yolov8n.pt")
+#  ──모델 로드 ──
+model = YOLO("best.pt")
 
 recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 recv_sock.bind((LISTEN_IP, LISTEN_PORT))
