@@ -1,5 +1,5 @@
-# Generated from site_config/config/rmf_test.site.yaml.
-# Edit the site config and rerun `ros2 run site_config generate_configs`.
+# Pinky RMF adapter runtime config.
+# RMF domain topic names are defined under fleet_manager.robots.
 rmf_fleet:
   name: pinky
   limits:

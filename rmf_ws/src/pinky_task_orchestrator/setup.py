@@ -3,7 +3,7 @@ from glob import glob
 from setuptools import setup
 
 
-package_name = "pinky_rmf_adapter"
+package_name = "pinky_task_orchestrator"
 
 setup(
     name=package_name,
@@ -15,17 +15,16 @@ setup(
         ("share/" + package_name + "/config", glob("config/*.yaml")),
         ("share/" + package_name + "/launch", glob("launch/*.py")),
     ],
-    install_requires=["setuptools", "nudged"],
+    install_requires=["setuptools"],
     zip_safe=True,
     maintainer="ane",
     maintainer_email="ane@example.com",
-    description="RMF fleet adapter for Pinky robots.",
+    description="Workflow task orchestrator for Pinky RMF missions.",
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "fleet_adapter = pinky_rmf_adapter.pinky_fleet_adapter:main",
-            "pinky_fleet_adapter = pinky_rmf_adapter.pinky_fleet_adapter:main",
+            "pinky_task_orchestrator = pinky_task_orchestrator.pinky_task_orchestrator:main",
         ],
     },
 )
