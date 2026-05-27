@@ -3,7 +3,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from launch_ros.actions import Node
 
 
@@ -29,7 +29,13 @@ def generate_launch_description():
                     LaunchConfiguration("config_file"),
                     "--ros-args",
                     "--log-level",
-                    LaunchConfiguration("log_level"),
+                    PythonExpression(
+                        [
+                            "'pinky_task_orchestrator:=' + '",
+                            LaunchConfiguration("log_level"),
+                            "'",
+                        ]
+                    ),
                 ],
             ),
         ]

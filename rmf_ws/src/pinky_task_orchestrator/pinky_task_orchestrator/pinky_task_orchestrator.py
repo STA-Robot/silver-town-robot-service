@@ -7,6 +7,7 @@ import uuid
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.task import Future
 from rmf_fleet_msgs.msg import FleetState
 from rmf_task_msgs.msg import ApiRequest, ApiResponse, DispatchStates, TaskSummary
@@ -153,16 +154,23 @@ class PinkyTaskOrchestrator(Node):
         self.completed_rmf_task_ids = set()
         self.pending_api_requests = {}
         self.fleet_robot_states = {}
+        self.last_logged_fleet_robot_states = {}
+        task_api_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self.api_request_pub = self.create_publisher(
             ApiRequest,
             task_api_request_topic,
-            10,
+            task_api_qos,
         )
         self.api_response_sub = self.create_subscription(
             ApiResponse,
             task_api_response_topic,
             self._on_api_response,
-            10,
+            task_api_qos,
         )
         self.table_call_srv = self.create_service(
             TableCall,
@@ -703,10 +711,17 @@ class PinkyTaskOrchestrator(Node):
 
         for robot in msg.robots:
             self.fleet_robot_states[robot.name] = robot
-            self.get_logger().debug(
-                f"fleet_state robot={robot.name} task_id={robot.task_id} "
-                f"mode={robot.mode.mode} battery={robot.battery_percent:.1f}"
+            state_key = (
+                robot.task_id,
+                robot.mode.mode,
+                round(robot.battery_percent, 1),
             )
+            if self.last_logged_fleet_robot_states.get(robot.name) != state_key:
+                self.last_logged_fleet_robot_states[robot.name] = state_key
+                self.get_logger().debug(
+                    f"fleet_state robot={robot.name} task_id={robot.task_id} "
+                    f"mode={robot.mode.mode} battery={robot.battery_percent:.1f}"
+                )
 
 def _load_config(config_file: str) -> dict:
     if not config_file:
