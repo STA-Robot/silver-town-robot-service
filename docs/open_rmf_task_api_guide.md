@@ -107,7 +107,7 @@ Fleet-level dispatch 예시:
         }
       ]
     },
-    "requester": "pinky_task_orchestrator",
+    "requester": "task_orchestrator",
     "fleet_name": "pinky",
     "labels": ["mission_001", "table_collection", "tent_1"]
   }
@@ -135,7 +135,7 @@ Fleet-level dispatch 예시:
         }
       ]
     },
-    "requester": "pinky_task_orchestrator",
+    "requester": "task_orchestrator",
     "fleet_name": "pinky",
     "labels": ["mission_001", "warehouse_move", "warehouse"]
   }
@@ -236,12 +236,12 @@ Robot/Fleet 상태 확인에 사용한다.
 
 ---
 
-## 5. Pinky Workflow 기준 권장 구조
+## 5. 서비스 Workflow 기준 권장 구조
 
 Table call이 들어오면:
 
 ```text
-pinky_task_orchestrator
+task_orchestrator
   -> task_api_requests 또는 /task_api_service
   -> dispatch_task_request
 ```

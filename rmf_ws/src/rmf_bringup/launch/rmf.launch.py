@@ -10,14 +10,14 @@ from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
     adapter_share = get_package_share_directory("pinky_rmf_adapter")
-    maps_share = get_package_share_directory("pinky_rmf_maps")
-    orchestrator_share = get_package_share_directory("pinky_task_orchestrator")
+    maps_share = get_package_share_directory("rmf_maps")
+    orchestrator_share = get_package_share_directory("task_orchestrator")
 
     adapter_launch = os.path.join(
         adapter_share, "launch", "pinky_fleet_adapter.launch.py"
     )
     core_launch = os.path.join(
-        get_package_share_directory("pinky_rmf_bringup"),
+        get_package_share_directory("rmf_bringup"),
         "launch",
         "rmf_core.launch.py",
     )

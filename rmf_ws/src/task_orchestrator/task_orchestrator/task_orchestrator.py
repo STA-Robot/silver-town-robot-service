@@ -12,11 +12,11 @@ from rclpy.task import Future
 from rmf_fleet_msgs.msg import FleetState
 from rmf_task_msgs.msg import ApiRequest, ApiResponse, DispatchStates, TaskSummary
 from pinky_drive_msgs.msg import DriveCommand
-from pinky_task_msgs.srv import CancelFollow, FollowCall, TableCall
+from task_msgs.srv import CancelFollow, FollowCall, TableCall
 import yaml
 
 
-REQUESTER = "pinky_task_orchestrator"
+REQUESTER = "task_orchestrator"
 DEFAULT_FLEET_NAME = "pinky"
 DEFAULT_TASK_API_REQUEST_TOPIC = "task_api_requests"
 DEFAULT_TASK_API_RESPONSE_TOPIC = "task_api_responses"
@@ -165,7 +165,7 @@ def wrap_robot_task_request(
     }
 
 
-class PinkyTaskOrchestrator(Node):
+class TaskOrchestrator(Node):
     def __init__(
         self,
         fleet_name: str = DEFAULT_FLEET_NAME,
@@ -176,7 +176,7 @@ class PinkyTaskOrchestrator(Node):
         return_map: str = "L1",
         return_pose: list[float] | None = None,
     ):
-        super().__init__("pinky_task_orchestrator")
+        super().__init__("task_orchestrator")
         self.fleet_name = fleet_name
         self.task_api_request_topic = task_api_request_topic
         self.task_api_response_topic = task_api_response_topic
@@ -244,7 +244,7 @@ class PinkyTaskOrchestrator(Node):
             10,
         )
         self.get_logger().info(
-            f"PinkyTaskOrchestrator ready fleet={self.fleet_name} "
+            f"TaskOrchestrator ready fleet={self.fleet_name} "
             f"task_api_topics={task_api_request_topic},{task_api_response_topic} "
             f"wait_seconds={self.default_wait_seconds} "
             f"warehouse={self.warehouse_waypoint} "
@@ -1083,8 +1083,8 @@ def main(argv=sys.argv):
     args_without_ros = rclpy.utilities.remove_ros_args(argv)
 
     parser = argparse.ArgumentParser(
-        prog="pinky_task_orchestrator",
-        description="Submit Pinky workflow tasks to the RMF task API.",
+        prog="task_orchestrator",
+        description="Submit service workflow tasks to the RMF task API.",
     )
     parser.add_argument("--config-file", default="")
     parser.add_argument("--fleet-name", default=DEFAULT_FLEET_NAME)
@@ -1103,7 +1103,7 @@ def main(argv=sys.argv):
 
     config = _load_config(args.config_file)
 
-    node = PinkyTaskOrchestrator(
+    node = TaskOrchestrator(
         fleet_name=config.get("fleet_name", args.fleet_name),
         task_api_request_topic=config.get(
             "task_api_request_topic",
