@@ -10,17 +10,14 @@ from rclpy.node import Node
 from rclpy.task import Future
 from rmf_fleet_msgs.msg import FleetState
 from rmf_task_msgs.msg import ApiRequest, ApiResponse, DispatchStates, TaskSummary
-from rmf_task_msgs.srv import ApiService
 from pinky_task_msgs.srv import TableCall
 import yaml
 
 
 REQUESTER = "pinky_task_orchestrator"
 DEFAULT_FLEET_NAME = "pinky"
-DEFAULT_TASK_API_SERVICE = "/task_api_service"
 DEFAULT_TASK_API_REQUEST_TOPIC = "task_api_requests"
 DEFAULT_TASK_API_RESPONSE_TOPIC = "task_api_responses"
-DEFAULT_TASK_API_TRANSPORT = "auto"
 TASK_STATE_NAMES = {
     TaskSummary.STATE_QUEUED: "queued",
     TaskSummary.STATE_ACTIVE: "active",
@@ -140,8 +137,6 @@ class PinkyTaskOrchestrator(Node):
     def __init__(
         self,
         fleet_name: str = DEFAULT_FLEET_NAME,
-        task_api_service: str = DEFAULT_TASK_API_SERVICE,
-        task_api_transport: str = DEFAULT_TASK_API_TRANSPORT,
         task_api_request_topic: str = DEFAULT_TASK_API_REQUEST_TOPIC,
         task_api_response_topic: str = DEFAULT_TASK_API_RESPONSE_TOPIC,
         default_wait_seconds: int = 20,
@@ -149,10 +144,6 @@ class PinkyTaskOrchestrator(Node):
     ):
         super().__init__("pinky_task_orchestrator")
         self.fleet_name = fleet_name
-        self.task_api_service = task_api_service
-        self.task_api_transport = self._normalize_task_api_transport(
-            task_api_transport
-        )
         self.task_api_request_topic = task_api_request_topic
         self.task_api_response_topic = task_api_response_topic
         self.default_wait_seconds = default_wait_seconds
@@ -162,21 +153,17 @@ class PinkyTaskOrchestrator(Node):
         self.completed_rmf_task_ids = set()
         self.pending_api_requests = {}
         self.fleet_robot_states = {}
-        self.api = self.create_client(ApiService, task_api_service)
-        self.api_request_pub = None
-        self.api_response_sub = None
-        if self.task_api_transport in ("auto", "topic"):
-            self.api_request_pub = self.create_publisher(
-                ApiRequest,
-                task_api_request_topic,
-                10,
-            )
-            self.api_response_sub = self.create_subscription(
-                ApiResponse,
-                task_api_response_topic,
-                self._on_api_response,
-                10,
-            )
+        self.api_request_pub = self.create_publisher(
+            ApiRequest,
+            task_api_request_topic,
+            10,
+        )
+        self.api_response_sub = self.create_subscription(
+            ApiResponse,
+            task_api_response_topic,
+            self._on_api_response,
+            10,
+        )
         self.table_call_srv = self.create_service(
             TableCall,
             "/table_call",
@@ -202,8 +189,6 @@ class PinkyTaskOrchestrator(Node):
         )
         self.get_logger().info(
             f"PinkyTaskOrchestrator ready fleet={self.fleet_name} "
-            f"task_api_transport={self.task_api_transport} "
-            f"task_api_service={task_api_service} "
             f"task_api_topics={task_api_request_topic},{task_api_response_topic} "
             f"wait_seconds={self.default_wait_seconds} "
             f"warehouse={self.warehouse_waypoint} table_call_service=/table_call"
@@ -272,7 +257,7 @@ class PinkyTaskOrchestrator(Node):
                 f"response={response}"
             )
 
-    def submit_table_collection_task_async(self, mission: Mission) -> bool:
+    def submit_table_collection_task_async(self, mission: Mission) -> None:
         wait_seconds = mission.wait_seconds or self.default_wait_seconds
         task_request = build_table_collection_task(
             mission_id=mission.mission_id,
@@ -281,7 +266,7 @@ class PinkyTaskOrchestrator(Node):
             fleet_name=self.fleet_name,
         )
         self._stamp_task_request(task_request)
-        self.get_logger().debug(
+        self.get_logger().info(
             f"dispatch table_collection request mission={mission.mission_id} "
             f"table={mission.table_waypoint} wait={wait_seconds}s"
         )
@@ -291,8 +276,6 @@ class PinkyTaskOrchestrator(Node):
                 "request": task_request,
             }
         )
-        if future is None:
-            return False
 
         future.add_done_callback(
             lambda completed: self._on_table_collection_response(
@@ -300,7 +283,6 @@ class PinkyTaskOrchestrator(Node):
                 completed,
             )
         )
-        return True
 
     def _handle_table_collection_response(
         self,
@@ -353,11 +335,7 @@ class PinkyTaskOrchestrator(Node):
             table_waypoint=table_waypoint,
             wait_seconds=wait_seconds,
         )
-        if not self.submit_table_collection_task_async(mission):
-            response.accepted = False
-            response.mission_id = mission.mission_id
-            response.message = "RMF task API is not available"
-            return response
+        self.submit_table_collection_task_async(mission)
 
         response.accepted = True
         response.mission_id = mission.mission_id
@@ -400,13 +378,25 @@ class PinkyTaskOrchestrator(Node):
             fleet_name=self.fleet_name,
         )
         self._stamp_task_request(task_request)
-        response = self._call_task_api(
+        future = self._call_task_api_async(
             wrap_robot_task_request(
                 fleet_name=self.fleet_name,
                 robot_name=mission.assigned_robot,
                 task_request=task_request,
             )
         )
+        future.add_done_callback(
+            lambda completed: self._on_warehouse_response(
+                mission,
+                completed,
+            )
+        )
+        self.get_logger().debug(
+            f"published warehouse robot_task_request mission={mission.mission_id} "
+            f"robot={mission.assigned_robot} waypoint={self.warehouse_waypoint}"
+        )
+
+    def _handle_warehouse_response(self, mission: Mission, response: dict) -> None:
         if not response.get("success", False):
             self._log_mission_transition(mission, "warehouse_task_submit_failed")
             self.get_logger().warning(
@@ -431,6 +421,10 @@ class PinkyTaskOrchestrator(Node):
             f"submitted warehouse move mission={mission.mission_id} "
             f"robot={mission.assigned_robot} response={response}"
         )
+
+    def _on_warehouse_response(self, mission: Mission, future) -> None:
+        response = self._future_json_result(future)
+        self._handle_warehouse_response(mission, response)
 
     def on_warehouse_task_completed(self, mission: Mission) -> None:
         self._log_mission_transition(mission, "warehouse_task_completed")
@@ -481,21 +475,8 @@ class PinkyTaskOrchestrator(Node):
     def _unix_millis_now(self) -> int:
         return int(time.time() * 1000)
 
-    def _normalize_task_api_transport(self, value: str) -> str:
-        transport = (value or DEFAULT_TASK_API_TRANSPORT).lower()
-        if transport in ("auto", "service", "topic"):
-            return transport
-
-        self.get_logger().warning(
-            f"unknown task_api_transport={value}; using auto"
-        )
-        return DEFAULT_TASK_API_TRANSPORT
-
     def _call_task_api(self, envelope: dict) -> dict:
-        future = self._send_task_api_request(envelope, service_timeout_sec=5.0)
-        if future is None:
-            return {"success": False, "message": "task API unavailable"}
-
+        future = self._publish_task_api_request(envelope)
         rclpy.spin_until_future_complete(self, future, timeout_sec=10.0)
         if not future.done():
             self._forget_pending_api_request(future)
@@ -506,46 +487,11 @@ class PinkyTaskOrchestrator(Node):
         return self._future_json_result(future)
 
     def _call_task_api_async(self, envelope: dict):
-        return self._send_task_api_request(envelope, service_timeout_sec=1.0)
-
-    def _send_task_api_request(
-        self,
-        envelope: dict,
-        service_timeout_sec: float,
-    ):
-        if self.task_api_transport in ("auto", "service"):
-            if self.api.wait_for_service(timeout_sec=service_timeout_sec):
-                request = ApiService.Request()
-                request.json_msg = json.dumps(envelope)
-                future = self.api.call_async(request)
-                setattr(future, "task_api_transport", "service")
-                return future
-
-            if self.task_api_transport == "service":
-                self.get_logger().warning(
-                    f"RMF task API service [{self.task_api_service}] is not available"
-                )
-                # TODO: Queue table calls until task API becomes available.
-                return None
-
-            self.get_logger().debug(
-                f"RMF task API service [{self.task_api_service}] is not available; "
-                "falling back to topic API"
-            )
-
-        if self.task_api_transport in ("auto", "topic"):
-            return self._publish_task_api_request(envelope)
-
-        return None
+        return self._publish_task_api_request(envelope)
 
     def _publish_task_api_request(self, envelope: dict):
-        if self.api_request_pub is None:
-            self.get_logger().warning("RMF task API request publisher is not configured")
-            return None
-
         request_id = f"orchestrator_{uuid.uuid4().hex}"
         future = Future()
-        setattr(future, "task_api_transport", "topic")
         setattr(future, "request_id", request_id)
         self.pending_api_requests[request_id] = future
 
@@ -553,7 +499,7 @@ class PinkyTaskOrchestrator(Node):
         msg.request_id = request_id
         msg.json_msg = json.dumps(envelope)
         self.api_request_pub.publish(msg)
-        self.get_logger().debug(
+        self.get_logger().info(
             f"published task API request request_id={request_id} "
             f"type={envelope.get('type')}"
         )
@@ -562,19 +508,23 @@ class PinkyTaskOrchestrator(Node):
     def _on_api_response(self, msg: ApiResponse) -> None:
         future = self.pending_api_requests.get(msg.request_id)
         if future is None:
-            self.get_logger().debug(
+            self.get_logger().warn(
                 f"ignoring task API response for unknown request_id={msg.request_id}"
             )
             return
 
         if msg.type == ApiResponse.TYPE_ACKNOWLEDGE:
-            self.get_logger().debug(
+            self.get_logger().info(
                 f"task API acknowledged request_id={msg.request_id}"
             )
             return
 
         self.pending_api_requests.pop(msg.request_id, None)
         if msg.type != ApiResponse.TYPE_RESPONDING:
+            self.get_logger().warning(
+                f"task API response failed request_id={msg.request_id} "
+                f"unexpected_type={msg.type}"
+            )
             future.set_result(
                 {
                     "success": False,
@@ -583,7 +533,14 @@ class PinkyTaskOrchestrator(Node):
             )
             return
 
-        future.set_result(self._parse_task_api_json(msg.json_msg))
+        response = self._parse_task_api_json(msg.json_msg)
+        if response.get("success", False):
+            self.get_logger().info(
+                f"task API response succeeded request_id={msg.request_id} "
+                f"task_id={self._extract_task_id(response)}"
+            )
+
+        future.set_result(response)
 
     def _forget_pending_api_request(self, future) -> None:
         request_id = getattr(future, "request_id", None)
@@ -600,14 +557,10 @@ class PinkyTaskOrchestrator(Node):
         if isinstance(response, dict):
             return self._normalize_task_api_response(response)
 
-        json_msg = getattr(response, "json_msg", None)
-        if json_msg is None:
-            return {
-                "success": False,
-                "message": f"unexpected task API response type {type(response).__name__}",
-            }
-
-        return self._parse_task_api_json(json_msg)
+        return {
+            "success": False,
+            "message": f"unexpected task API response type {type(response).__name__}",
+        }
 
     def _parse_task_api_json(self, json_msg: str) -> dict:
         try:
@@ -773,12 +726,6 @@ def main(argv=sys.argv):
     )
     parser.add_argument("--config-file", default="")
     parser.add_argument("--fleet-name", default=DEFAULT_FLEET_NAME)
-    parser.add_argument("--task-api-service", default=DEFAULT_TASK_API_SERVICE)
-    parser.add_argument(
-        "--task-api-transport",
-        choices=["auto", "service", "topic"],
-        default=DEFAULT_TASK_API_TRANSPORT,
-    )
     parser.add_argument(
         "--task-api-request-topic",
         default=DEFAULT_TASK_API_REQUEST_TOPIC,
@@ -796,11 +743,6 @@ def main(argv=sys.argv):
 
     node = PinkyTaskOrchestrator(
         fleet_name=config.get("fleet_name", args.fleet_name),
-        task_api_service=config.get("task_api_service", args.task_api_service),
-        task_api_transport=config.get(
-            "task_api_transport",
-            args.task_api_transport,
-        ),
         task_api_request_topic=config.get(
             "task_api_request_topic",
             args.task_api_request_topic,
