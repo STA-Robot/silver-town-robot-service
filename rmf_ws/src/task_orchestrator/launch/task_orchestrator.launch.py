@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("pinky_task_orchestrator")
+    package_share = get_package_share_directory("task_orchestrator")
     default_config = os.path.join(
         package_share,
         "config",
@@ -20,9 +20,9 @@ def generate_launch_description():
             DeclareLaunchArgument("config_file", default_value=default_config),
             DeclareLaunchArgument("log_level", default_value="info"),
             Node(
-                package="pinky_task_orchestrator",
-                executable="pinky_task_orchestrator",
-                name="pinky_task_orchestrator",
+                package="task_orchestrator",
+                executable="task_orchestrator",
+                name="task_orchestrator",
                 output="screen",
                 arguments=[
                     "--config-file",
@@ -31,7 +31,7 @@ def generate_launch_description():
                     "--log-level",
                     PythonExpression(
                         [
-                            "'pinky_task_orchestrator:=' + '",
+                            "'task_orchestrator:=' + '",
                             LaunchConfiguration("log_level"),
                             "'",
                         ]

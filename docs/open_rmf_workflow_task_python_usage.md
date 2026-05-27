@@ -33,7 +33,7 @@ RMF fleet adapter가 그 task를 `DriveCommand`로 변환하고, Pinky는 `Drive
 table call / UI / API
         |
         v
-pinky_task_orchestrator
+task_orchestrator
         |
         |  RMF task API
         v
@@ -49,7 +49,7 @@ Pinky drive manager / Nav2
 ```
 
 ```
-pinky_task_orchestrator
+task_orchestrator
         |
         |  workcell/ingestor status + result coordination
         v
@@ -63,7 +63,7 @@ fixed loading robot arm
 역할 분리는 명확히 둔다.
 
 - Open-RMF: 로봇 선택, traffic schedule, task 실행, parking 복귀
-- `pinky_task_orchestrator`: 업무 workflow, 분기, 같은 로봇 유지, 로봇팔 workcell 결과 조정
+- `task_orchestrator`: 업무 workflow, 분기, 같은 로봇 유지, 로봇팔 workcell 결과 조정
 - Pinky adapter: RMF task 실행 요청을 Pinky의 `DriveCommand`로 변환
 - Pinky drive manager: `navigate`, `returning`, `stop` 등 실제 주행 명령 수행
 
@@ -266,7 +266,7 @@ def build_table_collection_task(
             ],
         },
         "labels": [mission_id, "table_collection", table_waypoint],
-        "requester": "pinky_task_orchestrator",
+        "requester": "task_orchestrator",
         "fleet_name": "pinky",
     }
 ```
@@ -301,7 +301,7 @@ def build_warehouse_move_task(
             ],
         },
         "labels": [mission_id, "warehouse_move", warehouse_waypoint],
-        "requester": "pinky_task_orchestrator",
+        "requester": "task_orchestrator",
         "fleet_name": "pinky",
     }
 ```
@@ -335,7 +335,7 @@ Jazzy 스키마에는 `dispatch_task_request`와 `robot_task_request`가 모두 
 - mission 완료 후 복귀는 `finishing_request: park`에 맡기므로 별도 return task를 제출하지 않는다.
 - `compose`, `go_to_place`, `perform_action` 스키마를 사용해 이동과 대기/작업을 묶는다.
 
-별도 `pinky_task_orchestrator` 노드에서 가장 깔끔한 방식은 RMF task API service에
+별도 `task_orchestrator` 노드에서 가장 깔끔한 방식은 RMF task API service에
 JSON request를 보내는 것이다.
 
 ```python
@@ -350,7 +350,7 @@ from rmf_task_msgs.srv import ApiService
 
 class RmfTaskApiClient(Node):
     def __init__(self):
-        super().__init__("pinky_task_orchestrator")
+        super().__init__("task_orchestrator")
         # 실제 service 이름은 배포 launch에서 확인한다.
         # 일반적으로 rmf_task_msgs/srv/ApiService 타입의 task API service를 사용한다.
         self.api = self.create_client(ApiService, "/task_api_service")
@@ -447,7 +447,7 @@ from rmf_task_msgs.msg import ApiRequest, ApiResponse
 
 class RmfTaskTopicClient(Node):
     def __init__(self):
-        super().__init__("pinky_task_orchestrator")
+        super().__init__("task_orchestrator")
         self.pending = {}
         self.request_pub = self.create_publisher(
             ApiRequest,
@@ -554,7 +554,7 @@ class LegacySubmitTaskClient(Node):
 
     def submit_station_task(self, place_name: str):
         req = SubmitTask.Request()
-        req.requester = "pinky_task_orchestrator"
+        req.requester = "task_orchestrator"
 
         req.description = TaskDescription()
         req.description.start_time = self.get_clock().now().to_msg()
@@ -593,7 +593,7 @@ from rmf_task_msgs.msg import TaskSummary, DispatchStates
 
 class MissionTracker(Node):
     def __init__(self):
-        super().__init__("pinky_mission_tracker")
+        super().__init__("mission_tracker")
         self.missions_by_task_id = {}
         self.task_summary_sub = self.create_subscription(
             TaskSummary,
@@ -641,10 +641,10 @@ class MissionTracker(Node):
 
 ## Orchestrator 메서드 설계
 
-실제 `pinky_task_orchestrator`는 아래 정도의 public method를 가지면 충분하다.
+실제 `task_orchestrator`는 아래 정도의 public method를 가지면 충분하다.
 
 ```python
-class PinkyTaskOrchestrator(Node):
+class TaskOrchestrator(Node):
     def on_table_call(self, table_id: str) -> str:
         """table call을 mission으로 만들고 table collection task를 제출한다."""
 
@@ -719,7 +719,7 @@ fleet_handle.consider_composed_requests(consider_callback)
 
 이 프로젝트에서는 다음 순서로 구현하는 것을 권장한다.
 
-1. `pinky_task_orchestrator`를 별도 Python ROS 2 노드로 만든다.
+1. `task_orchestrator`를 별도 Python ROS 2 노드로 만든다.
 2. RMF task 제출은 JSON API service 또는 topic을 사용한다.
 3. table task는 `compose`: `go_to_place + perform_action(wait_at_table)`로 만든다.
 4. storage full이면 warehouse task를 `robot_task_request`로 같은 로봇에게 보낸다.

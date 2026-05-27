@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
-project(pinky_rmf_maps)
+project(rmf_bringup)
 
 find_package(ament_cmake REQUIRED)
 
 install(
-  DIRECTORY maps nav_graphs
+  DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
 

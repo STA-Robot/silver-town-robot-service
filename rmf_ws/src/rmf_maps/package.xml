@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>pinky_rmf_maps</name>
+  <name>rmf_maps</name>
   <version>0.1.0</version>
-  <description>Maps and navigation graphs for the Pinky RMF test deployment.</description>
+  <description>Maps and navigation graphs for the RMF test deployment.</description>
   <maintainer email="ane@example.com">ane</maintainer>
   <license>Apache-2.0</license>
 

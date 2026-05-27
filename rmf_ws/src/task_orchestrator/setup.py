@@ -3,7 +3,7 @@ from glob import glob
 from setuptools import setup
 
 
-package_name = "pinky_task_orchestrator"
+package_name = "task_orchestrator"
 
 setup(
     name=package_name,
@@ -19,12 +19,12 @@ setup(
     zip_safe=True,
     maintainer="ane",
     maintainer_email="ane@example.com",
-    description="Workflow task orchestrator for Pinky RMF missions.",
+    description="Workflow task orchestrator for service robot RMF missions.",
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "pinky_task_orchestrator = pinky_task_orchestrator.pinky_task_orchestrator:main",
+            "task_orchestrator = task_orchestrator.task_orchestrator:main",
         ],
     },
 )
