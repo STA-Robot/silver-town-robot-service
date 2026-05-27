@@ -11,7 +11,8 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from rclpy.task import Future
 from rmf_fleet_msgs.msg import FleetState
 from rmf_task_msgs.msg import ApiRequest, ApiResponse, DispatchStates, TaskSummary
-from pinky_task_msgs.srv import TableCall
+from pinky_drive_msgs.msg import DriveCommand
+from pinky_task_msgs.srv import CancelFollow, FollowCall, TableCall
 import yaml
 
 
@@ -121,6 +122,36 @@ def build_warehouse_move_task(
     }
 
 
+def build_follow_task(
+    mission_id: str,
+    fleet_name: str = DEFAULT_FLEET_NAME,
+) -> dict:
+    return {
+        "category": "compose",
+        "description": {
+            "category": "follow",
+            "detail": "Follow person",
+            "phases": [
+                {
+                    "activity": {
+                        "category": "perform_action",
+                        "description": {
+                            "category": "follow",
+                            "description": {
+                                "mission_id": mission_id,
+                            },
+                            "unix_millis_action_duration_estimate": 60000,
+                        },
+                    }
+                }
+            ],
+        },
+        "labels": [mission_id, "follow"],
+        "requester": REQUESTER,
+        "fleet_name": fleet_name,
+    }
+
+
 def wrap_robot_task_request(
     fleet_name: str,
     robot_name: str,
@@ -142,6 +173,8 @@ class PinkyTaskOrchestrator(Node):
         task_api_response_topic: str = DEFAULT_TASK_API_RESPONSE_TOPIC,
         default_wait_seconds: int = 20,
         warehouse_waypoint: str = "warehouse",
+        return_map: str = "L1",
+        return_pose: list[float] | None = None,
     ):
         super().__init__("pinky_task_orchestrator")
         self.fleet_name = fleet_name
@@ -149,12 +182,17 @@ class PinkyTaskOrchestrator(Node):
         self.task_api_response_topic = task_api_response_topic
         self.default_wait_seconds = default_wait_seconds
         self.warehouse_waypoint = warehouse_waypoint
+        self.return_map = return_map
+        self.return_pose = return_pose or [0.15874, 0.43924, 0.0]
         self.missions_by_id = {}
         self.missions_by_task_id = {}
         self.completed_rmf_task_ids = set()
         self.pending_api_requests = {}
         self.fleet_robot_states = {}
         self.last_logged_fleet_robot_states = {}
+        self.follow_missions_by_robot = {}
+        self.follow_missions_by_task_id = {}
+        self.robot_command_pubs = {}
         task_api_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
             depth=10,
@@ -176,6 +214,16 @@ class PinkyTaskOrchestrator(Node):
             TableCall,
             "/table_call",
             self._on_table_call_request,
+        )
+        self.follow_call_srv = self.create_service(
+            FollowCall,
+            "/follow_call",
+            self._on_follow_call_request,
+        )
+        self.cancel_follow_srv = self.create_service(
+            CancelFollow,
+            "/cancel_follow_call",
+            self._on_cancel_follow_request,
         )
         self.task_summary_sub = self.create_subscription(
             TaskSummary,
@@ -199,7 +247,9 @@ class PinkyTaskOrchestrator(Node):
             f"PinkyTaskOrchestrator ready fleet={self.fleet_name} "
             f"task_api_topics={task_api_request_topic},{task_api_response_topic} "
             f"wait_seconds={self.default_wait_seconds} "
-            f"warehouse={self.warehouse_waypoint} table_call_service=/table_call"
+            f"warehouse={self.warehouse_waypoint} "
+            f"return={self.return_map}:{self.return_pose} "
+            f"services=/table_call,/follow_call,/cancel_follow_call"
         )
 
     def _create_table_mission(
@@ -403,6 +453,279 @@ class PinkyTaskOrchestrator(Node):
             f"published warehouse robot_task_request mission={mission.mission_id} "
             f"robot={mission.assigned_robot} waypoint={self.warehouse_waypoint}"
         )
+
+    def submit_follow_task(
+        self,
+        robot_name: str,
+        mission_id: str | None = None,
+    ):
+        mission_label = mission_id or f"follow_{uuid.uuid4().hex[:8]}"
+        task_request = build_follow_task(
+            mission_id=mission_label,
+            fleet_name=self.fleet_name,
+        )
+        self._stamp_task_request(task_request)
+        future = self._call_task_api_async(
+            wrap_robot_task_request(
+                fleet_name=self.fleet_name,
+                robot_name=robot_name,
+                task_request=task_request,
+            )
+        )
+        self.get_logger().info(
+            f"published follow robot_task_request mission={mission_label} "
+            f"robot={robot_name}"
+        )
+        return future
+
+    def cancel_follow_task(self, robot_name: str, follow_info: dict):
+        task_id = follow_info["task_id"]
+        self._publish_robot_stop(robot_name)
+        self._publish_robot_returning(robot_name)
+        future = self._call_task_api_async(
+            {
+                "type": "kill_task_request",
+                "task_id": task_id,
+                "labels": [
+                    follow_info["mission_id"],
+                    "follow",
+                    "cancel_follow",
+                    robot_name,
+                ],
+            }
+        )
+        follow_info["state"] = "cancel_requested"
+        self.get_logger().info(
+            f"published kill follow request mission={follow_info['mission_id']} "
+            f"robot={robot_name} task_id={task_id}"
+        )
+        return future
+
+    def _publish_robot_stop(self, robot_name: str) -> None:
+        pub = self._get_robot_command_pub(robot_name)
+
+        command = DriveCommand()
+        command.header.stamp = self.get_clock().now().to_msg()
+        command.robot_name = robot_name
+        command.command_id = f"orchestrator-{robot_name}-stop-{time.time_ns()}"
+        command.command_type = "stop"
+        command.payload_json = ""
+        pub.publish(command)
+        self.get_logger().info(
+            f"published direct stop command robot={robot_name} "
+            f"command_id={command.command_id}"
+        )
+
+    def _publish_robot_returning(self, robot_name: str) -> None:
+        pub = self._get_robot_command_pub(robot_name)
+
+        command = DriveCommand()
+        command.header.stamp = self.get_clock().now().to_msg()
+        command.robot_name = robot_name
+        command.command_id = f"orchestrator-{robot_name}-returning-{time.time_ns()}"
+        command.command_type = "returning"
+        command.map_name = self.return_map
+        command.x = float(self.return_pose[0])
+        command.y = float(self.return_pose[1])
+        command.yaw = float(self.return_pose[2])
+        command.payload_json = ""
+        pub.publish(command)
+        self.get_logger().info(
+            f"published direct returning command robot={robot_name} "
+            f"command_id={command.command_id} pose={self.return_pose}"
+        )
+
+    def _get_robot_command_pub(self, robot_name: str):
+        pub = self.robot_command_pubs.get(robot_name)
+        if pub is None:
+            pub = self.create_publisher(
+                DriveCommand,
+                f"/{robot_name}/command",
+                10,
+            )
+            self.robot_command_pubs[robot_name] = pub
+        return pub
+
+    def _on_follow_response(
+        self,
+        mission_id: str,
+        robot_name: str,
+        future,
+    ) -> None:
+        response = self._future_json_result(future)
+        if response.get("success", False):
+            task_id = self._extract_task_id(response)
+            follow_info = self.follow_missions_by_robot.get(robot_name)
+            if (
+                follow_info is not None
+                and follow_info.get("mission_id") == mission_id
+            ):
+                follow_info["task_id"] = task_id
+                follow_info["state"] = "submitted"
+                if task_id:
+                    self.follow_missions_by_task_id[task_id] = follow_info
+            self.get_logger().info(
+                f"submitted follow mission={mission_id} "
+                f"robot={robot_name} task_id={task_id} response={response}"
+            )
+            return
+
+        follow_info = self.follow_missions_by_robot.get(robot_name)
+        if follow_info and follow_info.get("mission_id") == mission_id:
+            self.follow_missions_by_robot.pop(robot_name, None)
+        self.get_logger().warning(
+            f"failed to submit follow mission={mission_id} "
+            f"robot={robot_name} response={response}"
+        )
+
+    def _on_cancel_follow_response(
+        self,
+        mission_id: str,
+        robot_name: str,
+        task_id: str,
+        future,
+    ) -> None:
+        response = self._future_json_result(future)
+        if response.get("success", False):
+            follow_info = self.follow_missions_by_robot.get(robot_name)
+            if (
+                follow_info is not None
+                and follow_info.get("mission_id") == mission_id
+                and follow_info.get("task_id") == task_id
+            ):
+                self.follow_missions_by_robot.pop(robot_name, None)
+            self.follow_missions_by_task_id.pop(task_id, None)
+            self.get_logger().info(
+                f"killed follow mission={mission_id} "
+                f"robot={robot_name} task_id={task_id} response={response}"
+            )
+            return
+
+        follow_info = self.follow_missions_by_robot.get(robot_name)
+        if (
+            follow_info is not None
+            and follow_info.get("mission_id") == mission_id
+            and follow_info.get("task_id") == task_id
+        ):
+            follow_info["state"] = "submitted"
+        self.get_logger().warning(
+            f"failed to cancel follow mission={mission_id} "
+            f"robot={robot_name} task_id={task_id} response={response}"
+        )
+
+    def _on_follow_call_request(
+        self,
+        request: FollowCall.Request,
+        response: FollowCall.Response,
+    ) -> FollowCall.Response:
+        robot_name = request.robot_name.strip()
+
+        if not robot_name:
+            response.accepted = False
+            response.mission_id = ""
+            response.message = "robot_name is required"
+            return response
+
+        active_follow = self.follow_missions_by_robot.get(robot_name)
+        if active_follow and active_follow.get("state") in {
+            "submission_pending",
+            "submitted",
+            "cancel_requested",
+        }:
+            response.accepted = False
+            response.mission_id = active_follow.get("mission_id", "")
+            response.message = "follow task is already active for this robot"
+            return response
+
+        mission_id = f"follow_{uuid.uuid4().hex[:8]}"
+        self._get_robot_command_pub(robot_name)
+        self.follow_missions_by_robot[robot_name] = {
+            "mission_id": mission_id,
+            "robot_name": robot_name,
+            "task_id": None,
+            "state": "submission_pending",
+        }
+        future = self.submit_follow_task(
+            robot_name=robot_name,
+            mission_id=mission_id,
+        )
+        future.add_done_callback(
+            lambda completed: self._on_follow_response(
+                mission_id,
+                robot_name,
+                completed,
+            )
+        )
+
+        response.accepted = True
+        response.mission_id = mission_id
+        response.message = "follow call accepted; RMF submission pending"
+        self.get_logger().info(
+            f"accepted follow_call mission={mission_id} "
+            f"robot={robot_name}"
+        )
+        return response
+
+    def _on_cancel_follow_request(
+        self,
+        request: CancelFollow.Request,
+        response: CancelFollow.Response,
+    ) -> CancelFollow.Response:
+        robot_name = request.robot_name.strip()
+
+        if not robot_name:
+            response.accepted = False
+            response.mission_id = ""
+            response.task_id = ""
+            response.message = "robot_name is required"
+            return response
+
+        follow_info = self.follow_missions_by_robot.get(robot_name)
+        if not follow_info:
+            response.accepted = False
+            response.mission_id = ""
+            response.task_id = ""
+            response.message = "no active follow task for this robot"
+            return response
+
+        mission_id = str(follow_info.get("mission_id") or "")
+        task_id = str(follow_info.get("task_id") or "")
+        state = str(follow_info.get("state") or "")
+        if state == "submission_pending" or not task_id:
+            response.accepted = False
+            response.mission_id = mission_id
+            response.task_id = task_id
+            response.message = "follow task submission is still pending"
+            return response
+        if state == "cancel_requested":
+            response.accepted = False
+            response.mission_id = mission_id
+            response.task_id = task_id
+            response.message = "follow cancel is already pending"
+            return response
+
+        future = self.cancel_follow_task(robot_name, follow_info)
+        future.add_done_callback(
+            lambda completed: self._on_cancel_follow_response(
+                mission_id,
+                robot_name,
+                task_id,
+                completed,
+            )
+        )
+
+        response.accepted = True
+        response.mission_id = mission_id
+        response.task_id = task_id
+        response.message = (
+            "cancel follow accepted; robot stop/returning commands were sent "
+            "and RMF follow task kill is pending"
+        )
+        self.get_logger().info(
+            f"accepted cancel_follow_call mission={mission_id} "
+            f"robot={robot_name} task_id={task_id}"
+        )
+        return response
 
     def _handle_warehouse_response(self, mission: Mission, response: dict) -> None:
         if not response.get("success", False):
@@ -628,6 +951,30 @@ class PinkyTaskOrchestrator(Node):
 
     def _on_task_summary(self, msg: TaskSummary) -> None:
         task_id = msg.task_id or msg.task_profile.task_id
+        follow_info = self.follow_missions_by_task_id.get(task_id)
+        if follow_info is not None:
+            robot_name = str(follow_info.get("robot_name") or msg.robot_name)
+            state_name = self._task_state_name(msg.state)
+            self.get_logger().debug(
+                f"follow task_summary mission={follow_info['mission_id']} "
+                f"task_id={task_id} state={state_name} robot={robot_name} "
+                f"status={msg.status}"
+            )
+            if msg.state in (
+                TaskSummary.STATE_COMPLETED,
+                TaskSummary.STATE_FAILED,
+                TaskSummary.STATE_CANCELED,
+            ):
+                self.follow_missions_by_task_id.pop(task_id, None)
+                current = self.follow_missions_by_robot.get(robot_name)
+                if current is follow_info:
+                    self.follow_missions_by_robot.pop(robot_name, None)
+                self.get_logger().info(
+                    f"follow task ended mission={follow_info['mission_id']} "
+                    f"task_id={task_id} robot={robot_name} state={state_name}"
+                )
+            return
+
         mission = self.missions_by_task_id.get(task_id)
         state_name = self._task_state_name(msg.state)
         if mission is None:
@@ -773,6 +1120,8 @@ def main(argv=sys.argv):
             "warehouse_waypoint",
             args.warehouse_waypoint,
         ),
+        return_map=str(config.get("return_map", "L1")),
+        return_pose=list(config.get("return_pose", [0.15874, 0.43924, 0.0])),
     )
 
     if args.table_waypoint:

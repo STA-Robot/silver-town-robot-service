@@ -268,6 +268,16 @@ class RobotAdapter:
             self._finish_action_after_delay(execution, max(seconds, 0.001))
             return
 
+        if category == "follow":
+            self.node.get_logger().info(
+                f'Commanding [{self.name}] to follow person'
+            )
+            if not self.api.follow(self.name):
+                self.node.get_logger().warn(
+                    f'Failed to publish follow command for [{self.name}]'
+                )
+            return
+
         self.node.get_logger().warn(
             f'Unsupported action [{category}] for [{self.name}]'
         )
@@ -325,8 +335,9 @@ def _register_performable_actions(fleet_handle, node):
     consider_all = rmf_adapter.consider_all()
     more.consider_composed_requests(consider_all)
     more.add_performable_action("wait_at_table", consider_all)
+    more.add_performable_action("follow", consider_all)
     node.get_logger().info(
-        'Registered performable action [wait_at_table] for compose tasks'
+        'Registered performable actions [wait_at_table, follow] for compose tasks'
     )
 
 

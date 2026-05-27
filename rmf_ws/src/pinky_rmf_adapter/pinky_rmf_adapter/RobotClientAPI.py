@@ -150,6 +150,14 @@ class RobotAPI:
         # TODO: Wire robot-specific non-navigation activities when needed.
         return False
 
+    def follow(self, robot_name: str):
+        ''' Request the robot to start following a person or target.
+            Return True if the command was published. '''
+        return self._publish_command(
+            robot_name=robot_name,
+            command_type="follow",
+        )
+
     def stop(self, robot_name: str):
         ''' Command the robot to stop.
             Return True if robot has successfully stopped. Else False. '''

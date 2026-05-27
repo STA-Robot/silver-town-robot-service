@@ -33,7 +33,9 @@ rmf_ws/
 
     pinky_task_msgs/
       srv/
-        TableCall.srv             # table call service interface
+        TableCall.srv                # table call service interface
+        FollowCall.srv               # 특정 Pinky follow 시작 service interface
+        CancelFollow.srv             # follow task 취소 service interface
 
     pinky_task_orchestrator/
       config/
@@ -41,7 +43,7 @@ rmf_ws/
       launch/
         task_orchestrator.launch.py
       pinky_task_orchestrator/
-        pinky_task_orchestrator.py   # table call, mission, warehouse 분기 orchestration
+        pinky_task_orchestrator.py   # table/follow call, mission, warehouse orchestration
 
     pinky_rmf_bringup/
       launch/
@@ -56,7 +58,7 @@ rmf_ws/
 | `pinky_rmf_maps` | building map 원본과 생성된 nav graph를 보관하고 install한다. |
 | `pinky_rmf_adapter` | Pinky fleet adapter 코드와 adapter 설정을 보관한다. |
 | `pinky_task_msgs` | task orchestrator 외부 입력용 service interface를 제공한다. |
-| `pinky_task_orchestrator` | table call을 RMF task로 제출하고 mission workflow를 관리한다. |
+| `pinky_task_orchestrator` | table call과 follow call을 RMF task로 제출하고 mission workflow를 관리한다. |
 | `pinky_rmf_bringup` | RMF core, adapter, task orchestrator launch를 묶는다. |
 
 ## YAML 파일 위치
@@ -277,6 +279,41 @@ ros2 run pinky_task_orchestrator pinky_task_orchestrator \
   --ros-args --log-level pinky_task_orchestrator:=debug
 ```
 
+### Follow Service
+
+task orchestrator는 특정 Pinky에게 사람 추종을 시작시키는 `/follow_call` service를
+제공한다. 요청을 받으면 해당 로봇에 대한 RMF `robot_task_request`를 제출하고,
+fleet adapter는 compose task의 `perform_action` category `follow`를
+`DriveCommand(command_type=follow)`로 변환해 Pinky drive manager에 전달한다.
+
+```bash
+ros2 service call /follow_call pinky_task_msgs/srv/FollowCall \
+  "{robot_name: 'pinky1'}"
+```
+
+follow 상태 확인:
+
+```bash
+ros2 topic echo /pinky1/state
+```
+
+정상 수락되면 `state=following`, `last_command_status=accepted`가 publish된다.
+현재 follow 동작 자체는 Pinky drive manager의 follower/person-tracking 연동 지점에
+연결될 예정이다.
+
+follow를 중단하려면 `/cancel_follow_call` service를 호출한다. orchestrator는
+`/follow_call`로 제출한 follow task의 RMF `task_id`를 로봇별로 추적하고,
+cancel 요청 시 RMF Task API에 `cancel_task_request`를 보낸다.
+
+```bash
+ros2 service call /cancel_follow_call pinky_task_msgs/srv/CancelFollow \
+  "{robot_name: 'pinky1'}"
+```
+
+cancel이 받아들여지면 RMF가 실행 중인 follow task를 취소하고 adapter의 stop 경로를
+호출한다. 이후 `pinky_adapter.yaml`의 `finishing_request: park` 설정에 따라 RMF가
+자동으로 parking/returning 동작을 이어간다.
+
 ## 구현 메모
 
 ### Adapter
@@ -288,6 +325,7 @@ adapter 구현 시 우선 연결할 인터페이스:
 | robot state polling/update | RMF domain `/{robot_name}/state` subscribe |
 | navigation command | RMF domain `/{robot_name}/command` publish, `command_type=navigate` |
 | returning command | RMF domain `/{robot_name}/command` publish, `command_type=returning` |
+| follow command | RMF domain `/{robot_name}/command` publish, `command_type=follow` |
 | stop/cancel command | RMF domain `/{robot_name}/command` publish, `command_type=stop` |
 
 좌표 변환은 `pinky_adapter.yaml`의 `reference_coordinates`를 기준으로 처리한다.
