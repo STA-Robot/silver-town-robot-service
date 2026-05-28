@@ -11,6 +11,7 @@ REID_WEIGHT     = 0.6
 COLOR_WEIGHT    = 0.4
 MATCH_THRESHOLD = 0.45
 LOST_MAX_FRAMES = 90
+LOST_END_FRAMES = 600  # 약 60초 (10fps 기준) → END 전송 기준
 H_BINS          = 36
 S_BINS          = 32
 TORSO_RATIO     = (0.15, 0.65)
@@ -175,14 +176,17 @@ def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
         tracker.lost_frames += 1
         debug.lost_frames = tracker.lost_frames
 
-        if tracker.lost_frames >= LOST_MAX_FRAMES:
-            print(f"[타겟 소실] {LOST_MAX_FRAMES}프레임 미검출 → 소프트 리셋")
-            tracker.soft_reset()   #특징 유지한 채 ID만 리셋 (재탐색 대비)
+        if tracker.lost_frames >= LOST_END_FRAMES:   # 60초 → END
+            tracker.reset()
+            debug.is_lost = True
+            return "END", debug
+
+        if tracker.lost_frames >= LOST_MAX_FRAMES:   # 9초 → LOST
+            tracker.soft_reset()
             debug.is_lost = True
             return "LOST", debug
-        else:
-            print(f"[None] TargetID:{tracker.target_id}  Lost({tracker.lost_frames}f)")
-            return "None", debug
+
+        return "STOP", debug                         # 9초 미만 → STOP
 
     x1, y1, x2, y2, track_id, sim = best
     cx      = int((x1 + x2) / 2)
@@ -203,4 +207,4 @@ def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
     debug.box       = (int(x1), int(y1), int(x2), int(y2))
     debug.torso_box = (int(x1), ty1, int(x2), ty2)
 
-    return f"{cx},{cy},{h},{track_id}", debug
+    return f"FOLLOW,{cx},{cy},{h},{track_id}", debug
