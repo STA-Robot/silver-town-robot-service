@@ -57,7 +57,7 @@ class DriveManagerNode(Node):
         )
         self.emergency_topic = str(config.get("emergency_topic", "/emergency"))
         self.follow_event_topic = str(
-            config.get("follow_event_topic", "/internal/follow_event")
+            config.get("follow_event_topic", "/follow_event")
         )
 
         self.state = STATE_UNKNOWN
@@ -175,14 +175,20 @@ class DriveManagerNode(Node):
 
     def _follow_event_callback(self, msg: String) -> None:
         event = msg.data.strip().lower()
-        if event in {"start", "following"}:
-            self._transition(STATE_FOLLOWING, msg.data)
-        elif event in {"blocked"}:
-            self._transition(STATE_BLOCKED, msg.data)
-        elif event in {"stop", "done", "idle"}:
-            self._transition(STATE_IDLE, msg.data)
+
+        if event == "done":
+            if self.command_active and self.active_command_id:
+                self._finish_command(
+                    self.active_command_id,
+                    COMMAND_SUCCEEDED,
+                    "follow done",
+                    STATE_IDLE,
+                )
+            else:
+                self._transition(STATE_IDLE, msg.data)
         else:
-            self.message = msg.data
+            self.get_logger().warn(f"ignored follow event: {msg.data}")
+
         self._publish_state()
 
     def _handle_navigate_command(self, command: DriveCommand) -> None:
