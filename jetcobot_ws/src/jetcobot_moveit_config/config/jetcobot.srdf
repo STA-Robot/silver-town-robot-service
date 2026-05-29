@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="jetcobot">
+    <group name="arm">
+        <chain base_link="base_link" tip_link="TCP"/>
+    </group>
+    <group name="gripper">
+        <joint name="gripper_controller"/>
+    </group>
+    <group_state name="home" group="arm">
+        <joint name="joint2_to_joint1" value="0"/>
+        <joint name="joint3_to_joint2" value="0"/>
+        <joint name="joint4_to_joint3" value="0"/>
+        <joint name="joint5_to_joint4" value="0"/>
+        <joint name="joint6_to_joint5" value="0"/>
+        <joint name="joint6output_to_joint6" value="0"/>
+    </group_state>
+    <group_state name="ready" group="arm">
+        <joint name="joint2_to_joint1" value="0"/>
+        <joint name="joint3_to_joint2" value="-0.4995"/>
+        <joint name="joint4_to_joint3" value="-0.5641"/>
+        <joint name="joint5_to_joint4" value="-0.6219"/>
+        <joint name="joint6_to_joint5" value="1.5"/>
+        <joint name="joint6output_to_joint6" value="0"/>
+    </group_state>
+    <group_state name="open_gripper" group="gripper">
+        <joint name="gripper_controller" value="0.1451"/>
+    </group_state>
+    <group_state name="close_gripper" group="gripper">
+        <joint name="gripper_controller" value="-0.4696"/>
+    </group_state>
+    <end_effector name="gripper" parent_link="gripper_link" group="gripper" parent_group="arm"/>
+    <virtual_joint name="virtual_joint" type="fixed" parent_frame="world" child_link="base_link"/>
+    <disable_collisions link1="base_link" link2="1_Link" reason="Adjacent"/>
+    <disable_collisions link1="1_Link" link2="2_Link" reason="Adjacent"/>
+    <disable_collisions link1="2_Link" link2="3_Link" reason="Adjacent"/>
+    <disable_collisions link1="3_Link" link2="4_Link" reason="Adjacent"/>
+    <disable_collisions link1="4_Link" link2="5_Link" reason="Adjacent"/>
+    <disable_collisions link1="5_Link" link2="6_Link" reason="Adjacent"/>
+    <disable_collisions link1="6_Link" link2="gripper_link" reason="Adjacent"/>
+    <disable_collisions link1="6_Link" link2="jetcocam" reason="Adjacent"/>
+    <disable_collisions link1="gripper_link" link2="TCP" reason="Adjacent"/>
+    <disable_collisions link1="gripper_link" link2="gripper_command_link" reason="Adjacent"/>
+    <disable_collisions link1="jetcocam" link2="ov3360" reason="Adjacent"/>
+</robot>
