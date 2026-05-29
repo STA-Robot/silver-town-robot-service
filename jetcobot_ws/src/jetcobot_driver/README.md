@@ -25,8 +25,17 @@ ros2 launch jetcobot_driver pi_bringup.launch.py \
   baud:=1000000 \
   speed:=25 \
   gripper_speed:=80 \
-  joint_state_rate:=20.0
+  joint_state_rate:=20.0 \
+  wait_for_motion:=true \
+  motion_timeout:=15.0 \
+  joint_tolerance_deg:=3.0 \
+  poll_interval:=0.2
 ```
+
+By default, arm trajectory goals only succeed after the driver reads hardware
+joint angles with `pymycobot.get_angles()` and confirms that the target is
+within `joint_tolerance_deg`. Set `wait_for_motion:=false` to restore the old
+command-echo behavior.
 
 To also start the workcell arm manager on the JetCobot domain:
 
@@ -69,5 +78,6 @@ ros2 action send_goal /gripper_controller/follow_joint_trajectory \
 
 ## Joint States
 
-The driver publishes command-echo state on `/joint_states`. It does not poll
-hardware angles.
+The driver publishes `/joint_states` from the latest known positions. When
+`wait_for_motion` is enabled for arm goals, those positions are refreshed from
+`pymycobot.get_angles()` while the goal is running.
