@@ -7,6 +7,7 @@ defaults:
   nav2_action: /navigate_to_pose
   battery_percent_topic: /battery/percent
   emergency_topic: /emergency
+  follow_command_topic: /follow_command
   follow_event_topic: /follow_event
   assume_full_battery_if_missing: true
   allow_blocked_retry: true

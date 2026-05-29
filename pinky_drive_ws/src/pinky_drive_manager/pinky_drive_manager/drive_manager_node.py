@@ -56,6 +56,9 @@ class DriveManagerNode(Node):
             config.get("battery_percent_topic", "/battery/percent")
         )
         self.emergency_topic = str(config.get("emergency_topic", "/emergency"))
+        self.follow_command_topic = str(
+            config.get("follow_command_topic", "/follow_command")
+        )
         self.follow_event_topic = str(
             config.get("follow_event_topic", "/follow_event")
         )
@@ -118,6 +121,11 @@ class DriveManagerNode(Node):
             Bool,
             self.emergency_topic,
             self._emergency_callback,
+            qos_depth,
+        )
+        self.follow_command_pub = self.create_publisher(
+            String,
+            self.follow_command_topic,
             qos_depth,
         )
 
@@ -381,11 +389,13 @@ class DriveManagerNode(Node):
             )
         self._publish_state()
 
-    # TODO: follower/person-tracking 노드에 사람 추종 시작 요청을 연결한다.
     def _start_follow(self, command: DriveCommand) -> None:
+        msg = String()
+        msg.data = "start"
+        self.follow_command_pub.publish(msg)
         self.get_logger().info(
-            f"[{self.robot_name}] follow start placeholder: "
-            f"target=[{command.target_name}]"
+            f"[{self.robot_name}] published follow start command "
+            f"topic=[{self.follow_command_topic}] target=[{command.target_name}]"
         )
 
     def _cancel_motion(self) -> None:
