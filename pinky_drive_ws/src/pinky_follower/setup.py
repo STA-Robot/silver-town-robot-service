@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'follower = pinky_follower.follower:main',
+            'followerNode = pinky_follower.followerNode:main',
         ],
     },
 )
