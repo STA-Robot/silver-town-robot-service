@@ -1,7 +1,9 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.conditions import IfCondition
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -10,6 +12,12 @@ def generate_launch_description():
     speed = LaunchConfiguration("speed")
     gripper_speed = LaunchConfiguration("gripper_speed")
     joint_state_rate = LaunchConfiguration("joint_state_rate")
+    use_arm_manager = LaunchConfiguration("use_arm_manager")
+    arm_name = LaunchConfiguration("arm_name")
+    arm_manager_config_file = LaunchConfiguration("arm_manager_config_file")
+    command_topic = LaunchConfiguration("command_topic")
+    state_topic = LaunchConfiguration("state_topic")
+    move_group_action = LaunchConfiguration("move_group_action")
 
     return LaunchDescription(
         [
@@ -18,6 +26,21 @@ def generate_launch_description():
             DeclareLaunchArgument("speed", default_value="25"),
             DeclareLaunchArgument("gripper_speed", default_value="80"),
             DeclareLaunchArgument("joint_state_rate", default_value="20.0"),
+            DeclareLaunchArgument("use_arm_manager", default_value="false"),
+            DeclareLaunchArgument("arm_name", default_value="jetcobot1"),
+            DeclareLaunchArgument(
+                "arm_manager_config_file",
+                default_value=PathJoinSubstitution(
+                    [
+                        FindPackageShare("jetcobot_driver"),
+                        "config",
+                        "arm_manager.yaml",
+                    ]
+                ),
+            ),
+            DeclareLaunchArgument("command_topic", default_value="/command"),
+            DeclareLaunchArgument("state_topic", default_value="/state"),
+            DeclareLaunchArgument("move_group_action", default_value="/move_action"),
             Node(
                 package="jetcobot_driver",
                 executable="trajectory_action_server",
@@ -30,6 +53,22 @@ def generate_launch_description():
                         "speed": speed,
                         "gripper_speed": gripper_speed,
                         "joint_state_rate": joint_state_rate,
+                    }
+                ],
+            ),
+            Node(
+                package="jetcobot_driver",
+                executable="arm_manager",
+                name="jetcobot_arm_manager",
+                output="screen",
+                condition=IfCondition(use_arm_manager),
+                parameters=[
+                    {
+                        "arm_name": arm_name,
+                        "command_topic": command_topic,
+                        "state_topic": state_topic,
+                        "move_group_action": move_group_action,
+                        "config_file": arm_manager_config_file,
                     }
                 ],
             ),

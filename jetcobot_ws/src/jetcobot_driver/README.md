@@ -28,6 +28,19 @@ ros2 launch jetcobot_driver pi_bringup.launch.py \
   joint_state_rate:=20.0
 ```
 
+To also start the workcell arm manager on the JetCobot domain:
+
+```bash
+ros2 launch jetcobot_driver pi_bringup.launch.py \
+  port:=/dev/ttyJETCOBOT \
+  use_arm_manager:=true \
+  arm_name:=jetcobot1
+```
+
+The arm manager subscribes to `/command`, publishes `/state`, and sends
+MoveIt `MoveGroup` goals to `/move_action` using
+`config/arm_manager.yaml`.
+
 ## Smoke Test Arm Goal
 
 ```bash
