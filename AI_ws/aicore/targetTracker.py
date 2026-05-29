@@ -31,6 +31,7 @@ class TrackDebugInfo:
     box:         Optional[tuple] = None
     torso_box:   Optional[tuple] = None
     lost_frames: int             = 0
+    total_lost_frames: int       = 0
     is_lost:     bool            = False
 
 
@@ -82,6 +83,7 @@ class TargetTracker:
         self.ref_color_hist = None
         self.ref_reid_feat  = None
         self.lost_frames    = 0
+        self.total_lost_frames = 0
         self.id_history     = defaultdict(float)
 
     def reset(self):
@@ -90,6 +92,7 @@ class TargetTracker:
         self.ref_color_hist = None
         self.ref_reid_feat  = None
         self.lost_frames    = 0
+        self.total_lost_frames = 0
         self.id_history     = defaultdict(float)
         print("[타겟 리셋] 완전 초기화")
 
@@ -105,6 +108,7 @@ class TargetTracker:
         self.ref_color_hist = color_hist
         self.ref_reid_feat  = reid_feat
         self.lost_frames    = 0
+        self.total_lost_frames = 0
         print(f"[타겟 고정] ID={track_id}")
 
     def score(self, color_hist, reid_feat) -> float:
@@ -116,21 +120,13 @@ class TargetTracker:
             return r_sim
         return REID_WEIGHT * r_sim + COLOR_WEIGHT * c_sim
 
-    def update_reference(self, color_hist, reid_feat, alpha=0.05):
-        if color_hist is not None and self.ref_color_hist is not None:
-            self.ref_color_hist = (1 - alpha) * self.ref_color_hist + alpha * color_hist
-        if reid_feat is not None and self.ref_reid_feat is not None:
-            blended = (1 - alpha) * self.ref_reid_feat + alpha * reid_feat
-            norm    = np.linalg.norm(blended)
-            self.ref_reid_feat = blended / norm if norm > 0 else blended
-
 
 tracker = TargetTracker()
 
 
 def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
     results    = person_model.track(frame, persist=True)[0]
-    debug      = TrackDebugInfo(lost_frames=tracker.lost_frames)
+    debug      = TrackDebugInfo(lost_frames=tracker.lost_frames,total_lost_frames=tracker.total_lost_frames)
     best       = None
     best_area  = 0.0   #의미상 0.0 이 맞음 (area는 항상 양수)
 
@@ -149,24 +145,39 @@ def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
             color_hist = extract_hs_histogram(frame, xyxy)
             reid_feat  = extract_reid_feat(results, idx)
 
-            if tracker.target_id is None: # 등록 직후 → 이 박스가 타겟이므로 바로 best 후보에 넣기
-                tracker.register(track_id, color_hist, reid_feat)
-                sim = 1.0
-                tracker.update_reference(color_hist, reid_feat)
-            elif track_id == tracker.target_id:#이후 target_id같은지
-                tracker.lost_frames = 0
-                tracker.update_reference(color_hist, reid_feat)
+            if tracker.target_id is None:
+                if tracker.ref_color_hist is None:
+                    # 완전 초기 상태→ 첫 박스를 타겟으로 등록
+                    tracker.register(track_id, color_hist, reid_feat)
+                    sim = 1.0
+                else:
+                    # soft_reset 후 재탐색: 첫 특징과 비교
+                    sim = tracker.score(color_hist, reid_feat)
+                    print(f"[재탐색] ID:{track_id} sim={sim:.2f}")
+                    if sim >= MATCH_THRESHOLD:
+                        tracker.target_id         = track_id
+                        tracker.lost_frames       = 0
+                        tracker.total_lost_frames = 0
+                        print(f"[재탐색 성공] ID={track_id} (유사도={sim:.2f})")
+                    else:
+                        continue  # 다른 인형 — 무시
+            elif track_id == tracker.target_id:
+                # ── 같은 ID 정상 수신
+                tracker.lost_frames       = 0
+                tracker.total_lost_frames = 0
                 sim = 1.0
             else:
                 sim = tracker.score(color_hist, reid_feat)
-                tracker.id_history[track_id] += sim
-                print(f"[유사도] ID:{track_id} sim={sim:.2f}")
+                print(f"[아이디 변경] ID:{track_id} sim={sim:.2f}")
                 if sim >= MATCH_THRESHOLD:
-                    old_id = tracker.target_id
-                    tracker.register(track_id, color_hist, reid_feat)
-                    print(f"[ID 교체] {old_id} → {track_id}  (유사도={sim:.2f})")
+                    tracker.target_id         = track_id
+                    tracker.lost_frames       = 0
+                    tracker.total_lost_frames = 0
+                    print(f"re ID={track_id} (유사도={sim:.2f})")
                 else:
-                    continue   # 다른 개체 — 무시
+                    continue  # 다른 인형 — 무시
+ 
+            
 
             if area > best_area:
                 best_area = area
@@ -174,9 +185,11 @@ def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
 
     if best is None:
         tracker.lost_frames += 1
+        tracker.total_lost_frames += 1 
         debug.lost_frames = tracker.lost_frames
+        debug.total_lost_frames = tracker.total_lost_frames
 
-        if tracker.lost_frames >= LOST_END_FRAMES:   # 60초 → END
+        if tracker.total_lost_frames >= LOST_END_FRAMES:   # 60초 → END
             tracker.reset()
             debug.is_lost = True
             return "END", debug
