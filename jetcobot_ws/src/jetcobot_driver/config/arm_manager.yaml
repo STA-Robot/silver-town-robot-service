@@ -1,0 +1,67 @@
+motion:
+  move_group_server_timeout: 5.0
+  allowed_planning_time: 5.0
+  planning_attempts: 3
+  velocity_scaling: 0.1
+  acceleration_scaling: 0.1
+  joint_tolerance: 0.02
+  replan: true
+  replan_attempts: 2
+  replan_delay: 0.1
+  seconds_per_step_estimate: 3.0
+
+joint_names:
+  arm:
+    - joint2_to_joint1
+    - joint3_to_joint2
+    - joint4_to_joint3
+    - joint5_to_joint4
+    - joint6_to_joint5
+    - joint6output_to_joint6
+  gripper:
+    - gripper_controller
+
+# These smoke-test targets intentionally reuse known-safe home/ready-style
+# positions. Replace pick_approach and place_approach with calibrated values.
+joint_targets:
+  home:
+    group: arm
+    positions: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  ready:
+    group: arm
+    positions: [0.0, -0.4995, -0.5641, -0.6219, 1.5, 0.0]
+  pick_approach:
+    group: arm
+    positions: [0.0, -0.4995, -0.5641, -0.6219, 1.5, 0.0]
+  place_approach:
+    group: arm
+    positions: [0.0, -0.4995, -0.5641, -0.6219, 1.5, 0.0]
+  gripper_open:
+    group: gripper
+    positions: [0.1451]
+  gripper_close:
+    group: gripper
+    positions: [-0.4696]
+
+pick_and_place_sequence:
+  - target: ready
+    state: homing
+    message: moving to ready pose
+  # - target: gripper_open
+  #   state: picking
+  #   message: opening gripper
+  - target: pick_approach
+    state: picking
+    message: moving to pick approach
+  # - target: gripper_close
+  #   state: picking
+  #   message: closing gripper
+  - target: place_approach
+    state: placing
+    message: moving to place approach
+  - target: gripper_open
+    state: placing
+    message: releasing item
+  - target: home
+    state: homing
+    message: returning home
