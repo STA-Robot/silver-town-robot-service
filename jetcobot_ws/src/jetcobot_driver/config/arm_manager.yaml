@@ -50,18 +50,18 @@ pick_and_place_sequence:
   # - target: gripper_open
   #   state: picking
   #   message: opening gripper
-  - target: pick_approach
-    state: picking
-    message: moving to pick approach
+  # - target: pick_approach
+  #   state: picking
+  #   message: moving to pick approach
   # - target: gripper_close
   #   state: picking
   #   message: closing gripper
-  - target: place_approach
-    state: placing
-    message: moving to place approach
-  - target: gripper_open
-    state: placing
-    message: releasing item
+  # - target: place_approach
+  #   state: placing
+  #   message: moving to place approach
+  # - target: gripper_open
+  #   state: placing
+  #   message: releasing item
   - target: home
     state: homing
     message: returning home
