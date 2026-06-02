@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import Optional
 from ultralytics import YOLO
 from control.stateContoller import Event
-
-gesture_model = YOLO("models/gesture_best.pt")
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, "..", "models", "gesture_best.pt")
+gesture_model = YOLO(model_path)
 
 GESTURE_MAPPING = {
     "Paper":    Event.STOP,
@@ -27,6 +29,7 @@ class GestureDebugInfo:
 
 def get_gesture(frame) -> tuple[str, GestureDebugInfo]:
     results = gesture_model(frame, verbose=False)[0]
+    
     debug   = GestureDebugInfo()
  
     if len(results.boxes) == 0:

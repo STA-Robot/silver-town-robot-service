@@ -5,6 +5,7 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 from collections import defaultdict
+import os
 
 TARGET_CLASS    = "doll"
 REID_WEIGHT     = 0.6
@@ -16,7 +17,9 @@ H_BINS          = 36
 S_BINS          = 32
 TORSO_RATIO     = (0.15, 0.65)
 
-person_model = YOLO("models/doll_best.pt")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, "..", "models", "doll_best.pt")
+person_model = YOLO(model_path)
 
 
 @dataclass
@@ -126,6 +129,7 @@ tracker = TargetTracker()
 
 def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
     results    = person_model.track(frame, persist=True)[0]
+    
     debug      = TrackDebugInfo(lost_frames=tracker.lost_frames,total_lost_frames=tracker.total_lost_frames)
     best       = None
     best_area  = 0.0   #의미상 0.0 이 맞음 (area는 항상 양수)
