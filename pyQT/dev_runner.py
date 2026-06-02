@@ -7,7 +7,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # 감시할 대상 파일과 실행할 파이썬 인터프리터 경로 설정
-TARGET_SCRIPT = "QTlayout.py"
+TARGET_SCRIPT = "pyQT/QTlayout.py"
 PYTHON_PATH = sys.executable  # 현재 가상환경의 python 경로를 자동으로 잡습니다.
 
 class ReloadHandler(FileSystemEventHandler):

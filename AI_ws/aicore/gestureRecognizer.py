@@ -19,7 +19,7 @@ GESTURE_COLOR = {
     "Paper":    (0,   200, 255),   # 노랑  — STOP
     "Rock":     (0,     0, 220),   # 빨강  — END
 }
-CONF_THRESHOLD = 0.70
+CONF_THRESHOLD = 0.60
 
 @dataclass
 class GestureDebugInfo:
@@ -28,7 +28,8 @@ class GestureDebugInfo:
     box:    Optional[tuple]        = None   # (x1, y1, x2, y2) 정수
 
 def get_gesture(frame) -> tuple[str, GestureDebugInfo]:
-    results = gesture_model(frame, verbose=False)[0]
+    
+    results = gesture_model(frame, conf=0.6, iou=0.6, verbose=False)[0]
     
     debug   = GestureDebugInfo()
  

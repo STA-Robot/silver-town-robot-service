@@ -24,7 +24,7 @@ class RobotItem(QWidget):
         layout.addWidget(self.id_label)
         layout.addWidget(self.state_label)
         layout.addWidget(self.battery_label)
-        #layout.addStretch()
+
         layout.addWidget(self.view_btn)
     
         self.setLayout(layout)
@@ -77,16 +77,15 @@ class ControlUI(QWidget):
         event_title.setStyleSheet("background: black; color: white; font-weight: bold; font-size: 14px;")
         event_title.setFixedHeight(30)
 
-        # 열(Column) 개수를 다시 3개로 설정합니다.
-        self.event_table = QTableWidget(0, 3)
-        # 이름(Name)을 빼고 직관적인 3개 헤더로 지정합니다.
-        self.event_table.setHorizontalHeaderLabels(["No.", "Event Description", "Time"]) 
+        # 열(Column) 개수를 다시 2개로 설정합니다.
+        self.event_table = QTableWidget(0, 2)
+        # 이름(Name)을 빼고 직관적인 2개 헤더로 지정합니다.
+        self.event_table.setHorizontalHeaderLabels(["Event Description", "Time"]) 
         
         # 컬럼별 너비 비율 설정
         header = self.event_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # 번호는 글자 크기에 맞춤 (좁게)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)          # ROS 로그가 들어올 공간 (가장 넓게 꽉 채우기!)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents) # 시간은 글자 크기에 맞춤
+        header.setSectionResizeMode(0, QHeaderView.Stretch)          # ROS 로그가 들어올 공간 (가장 넓게 꽉 채우기!)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents) # 시간은 글자 크기에 맞춤
         
         self.event_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.event_table.setStyleSheet("border: none;") 
@@ -178,21 +177,14 @@ class ControlUI(QWidget):
         # 1. 새 행(Row) 생성
         current_row_count = self.event_table.rowCount()
         self.event_table.insertRow(current_row_count) 
-        
-        # 2. 자동으로 계산될 순번(No.) 생성
-        number_str = str(current_row_count + 1) 
-        
-        # 번호와 시간 아이템은 가운데 정렬을 해주면 가독성이 훨씬 올라갑니다 (선택 사항)
-        num_item = QTableWidgetItem(number_str)
-        num_item.setTextAlignment(Qt.AlignCenter)
+       
         
         time_item = QTableWidgetItem(timestamp)
         time_item.setTextAlignment(Qt.AlignCenter)
         
         # 3. 각각의 방 번호에 맞게 데이터를 정확히 배달합니다.
-        self.event_table.setItem(current_row_count, 0, num_item)                      # 0번 방: 순번 (가운데 정렬)
-        self.event_table.setItem(current_row_count, 1, QTableWidgetItem(description)) # 1번 방: ROS 로그 내용 (좌측 정렬)
-        self.event_table.setItem(current_row_count, 2, time_item)                     # 2번 방: 시간 (가운데 정렬)
+        self.event_table.setItem(current_row_count, 0, QTableWidgetItem(description)) # 1번 방: ROS 로그 내용 (좌측 정렬)
+        self.event_table.setItem(current_row_count, 1, time_item)                     # 2번 방: 시간 (가운데 정렬)
         
         # 4. 스크롤을 맨 아래로 이동 (새 로그 추적)
         self.event_table.scrollToBottom()

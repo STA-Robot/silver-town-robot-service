@@ -7,16 +7,16 @@ class FollowController(LoggerMixin):
         self.set_logger(logger)
 
         #  각속도 P 제어 
-        self.ANGULAR_GAIN = 0.0015
-        self.DEAD_ZONE    = 20
+        self.ANGULAR_GAIN = 0.0015 # 0.002 → 0.0015 (급회전 방지)
+        self.DEAD_ZONE    = 20 #5 → 20px (작은 떨림 무시)
         self.MAX_ANGULAR  = 0.20
 
-        #  선속도 P 제어 
-        self.Kp             = 1.0
-        self.MAX_SPEED      = 0.15
+        #  선속도 P 제어 (I제어 → P제어로 교체)
+        self.Kp             = 1.0 # P gain
+        self.MAX_SPEED      = 0.15  # 0.3 → 0.15 (좁은 공간)
         self.MIN_SPEED      = 0.05
-        self.TARGET_H_RATIO = 0.85
-        self.H_DEAD_ZONE    = 0.04
+        self.TARGET_H_RATIO = 0.85 #0.55 → 0.85 (더 가까이 따라붙기)20cm
+        self.H_DEAD_ZONE    = 0.04 #±4% 이내면 정지
 
         # 회전 시 선속도 감쇠 
         self.ANGULAR_DAMPING = 0.7

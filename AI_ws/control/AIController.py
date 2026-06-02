@@ -29,6 +29,7 @@ while True:
         if frame is None:
             continue
 
+        #frame = cv2.resize(frame, (640, 480))
         # 제스처 인식
         event, g_dbg = get_gesture(frame)
 
