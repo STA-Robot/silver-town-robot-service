@@ -1,9 +1,13 @@
 from dataclasses import dataclass
 from typing import Optional
+from collections import deque, Counter
 from ultralytics import YOLO
 from control.stateContoller import Event
+import os
 
-gesture_model = YOLO("models/gesture_best.pt")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(current_dir, "..", "models", "gesture_best.pt")
+gesture_model = YOLO(model_path)
 
 GESTURE_MAPPING = {
     "Paper":    Event.STOP,
@@ -17,7 +21,13 @@ GESTURE_COLOR = {
     "Paper":    (0,   200, 255),   # 노랑  — STOP
     "Rock":     (0,     0, 220),   # 빨강  — END
 }
-CONF_THRESHOLD = 0.70
+CONF_THRESHOLD = 0.60
+
+# 투표 설정- 순시간에 지나가는 제스처 무시 3프레임 까지 같은 동작
+VOTE_WINDOW    = 5   # 최근 몇 프레임을 볼 것인가
+VOTE_MIN_AGREE = 3   # 그 중 몇 번 일치해야 확정할 것인가
+ 
+_vote_history: deque = deque(maxlen=VOTE_WINDOW)# (Event, GestureDebugInfo) 저장
 
 @dataclass
 class GestureDebugInfo:
@@ -26,10 +36,13 @@ class GestureDebugInfo:
     box:    Optional[tuple]        = None   # (x1, y1, x2, y2) 정수
 
 def get_gesture(frame) -> tuple[str, GestureDebugInfo]:
-    results = gesture_model(frame, verbose=False)[0]
+    
+    results = gesture_model(frame, conf=0.6, iou=0.6, verbose=False)[0]
+    
     debug   = GestureDebugInfo()
  
     if len(results.boxes) == 0:
+        _vote_history.append((Event.NONE, debug))
         return Event.NONE, debug
  
     best_box = max(results.boxes, key=lambda b: float(b.conf))
@@ -37,6 +50,7 @@ def get_gesture(frame) -> tuple[str, GestureDebugInfo]:
  
     #임계값 미만이면 감지 무시
     if conf < CONF_THRESHOLD:
+        _vote_history.append((Event.NONE, debug))
         return Event.NONE, debug
  
     cls_id        = int(best_box.cls[0])
@@ -46,5 +60,18 @@ def get_gesture(frame) -> tuple[str, GestureDebugInfo]:
     debug.label = label
     debug.conf  = conf
     debug.box   = (int(x1), int(y1), int(x2), int(y2))
- 
-    return GESTURE_MAPPING.get(label, Event.NONE), debug
+
+    raw_event = GESTURE_MAPPING.get(label, Event.NONE)
+    _vote_history.append((raw_event, debug)) 
+
+    event_counts = Counter(e for e, _ in _vote_history)
+    top_event, top_cnt = event_counts.most_common(1)[0]
+
+    if top_event != Event.NONE and top_cnt >= VOTE_MIN_AGREE:
+        # 확정된 이벤트에 해당하는 debug 중 가장 최신 것을 반환
+        top_debug = next(
+            d for e, d in reversed(list(_vote_history)) if e == top_event
+        )
+        return top_event, top_debug
+
+    return Event.NONE, debug

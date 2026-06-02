@@ -3,8 +3,8 @@ from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
 
-from udpReceiver import UDPReceiver
-from msgHandler import StateHandler
+from pinky_follower.udpReceiver import UDPReceiver
+from pinky_follower.msgHandler import StateHandler
 
 
 class FollowerNode(Node):
@@ -14,9 +14,11 @@ class FollowerNode(Node):
         self.pub       = self.create_publisher(Twist,  '/cmd_vel',      10)
         self.event_pub = self.create_publisher(String, '/follow_event', 10)
 
+        # State flags
+        self.running = False
         self._is_ended    = False
         self._was_timeout = False
-
+        self._has_received = False
         self.state_handler = StateHandler(logger=self.get_logger())
 
         # 이벤트 드리븐: 메시지 도착 즉시 _on_udp_message() 호출
@@ -26,16 +28,47 @@ class FollowerNode(Node):
             on_message=self._on_udp_message
         )
 
+        # Control subscriber (START / STOP)
+        self.control_sub = self.create_subscription(
+            String,
+            'follow_command',
+            self._on_control_event,
+            10
+        )
+
         # timeout 감시 + Recovery 호출 전용 타이머
         self.timeout_timer = self.create_timer(0.5, self._check_timeout)
 
-        self.get_logger().info("Follower Node Started")
+        self.get_logger().info("Follower Node Ready (waiting follow_start)")
+
+    # CONTROL EVENT (START / STOP)
+    def _on_control_event(self, msg: String): 
+        if msg.data == "start":
+            self.get_logger().info("FOLLOW START")
+
+            self._is_ended = False
+            self._was_timeout = False
+            self._has_received = False
+
+            self.udp.reset()  # UDP 재연결
+
+            if self.timeout_timer.is_canceled():
+                self.timeout_timer.reset()
+
+            self.running = True
+
+        # elif msg.data == "stop":# rmf에서 상태가 변경된 최종 받아야하나?
+        #     self.get_logger().info("FOLLOW STOP")
+        #     self.running = False
+        #     self.pub.publish(Twist())
+
 
     # UDP 메시지 콜백 
     def _on_udp_message(self, msg):
-        if self._is_ended:
+        
+        if self._is_ended or not self.running:
             return
-
+        self._has_received = True
         if self._was_timeout:
             self.get_logger().info("UDP 수신 재개")
             self._was_timeout = False
@@ -51,7 +84,9 @@ class FollowerNode(Node):
 
     # timeout 감시 + Recovery 
     def _check_timeout(self):
-        if self._is_ended:
+        if self._is_ended or not self.running:
+            return
+        if not self._has_received:
             return
 
         if self.udp.is_timeout(1.0):# UDP 1초 이상 안 오면
@@ -73,16 +108,19 @@ class FollowerNode(Node):
 
     # END 처리 
     def _on_end(self):
-        self.pub.publish(Twist())           # 즉시 정지
+        self.get_logger().info("FOLLOW DONE")
 
-        e      = String()
-        e.data = "done"
-        self.event_pub.publish(e)
-        self.get_logger().info("[EVENT] done 발행 → FOLLOW 완전 비활성화")
+        self.running = False
+        self._is_ended = True
+
+        self.pub.publish(Twist())
+
+        msg = String()
+        msg.data = "done"
+        self.event_pub.publish(msg)
 
         self.udp.close()
         self.timeout_timer.cancel()
-        self._is_ended = True
 
     #노드 종료 
     def destroy_node(self):

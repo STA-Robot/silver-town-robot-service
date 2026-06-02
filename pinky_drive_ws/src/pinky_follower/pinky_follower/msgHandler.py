@@ -1,8 +1,8 @@
-from loggerMixin import LoggerMixin
-from followController import FollowController
+from pinky_follower.loggerMixin import LoggerMixin
+from pinky_follower.followController import FollowController
 """
 AI 서버 메시지 프로토콜:
-    FOLLOW,cx,cy,h,id  → 정상 추적
+    FOLLOW,cx,cy,h  → 정상 추적
     STOP               → 잠깐 소실 (9초 미만) → Recovery 안 함
     LOST               → 9초 이상 소실       → Recovery 탐색 시작
     END                → 60초 소실 / 종료    → done 발행
@@ -54,13 +54,13 @@ class StateHandler(LoggerMixin):
                 cx       = int(parts[1])
                 cy       = int(parts[2])
                 h        = int(parts[3])
-                track_id = int(parts[4])
+               
             except (ValueError, IndexError):
                 self._log_error(f"[FOLLOW] 파싱 실패: {msg}")
                 return None
 
             # compute() 내부에서 set_recovery(False) 자동 호출
-            linear, angular = self.controller.compute(cx, cy, h, track_id)
+            linear, angular = self.controller.compute(cx, cy, h)
             twist.linear.x  = linear
             twist.angular.z = angular
             self.prev_state = "FOLLOW"

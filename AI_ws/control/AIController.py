@@ -3,11 +3,11 @@ import socket
 import cv2
 import numpy as np
 
-from stateContoller import StateController, State, Event
+from control.stateContoller import StateController, State, Event
 from aicore.gestureRecognizer import get_gesture
 from aicore.targetTracker     import get_person_target, TrackDebugInfo, tracker as global_tracker
-from visualizer               import draw
-from comm                     import send_command
+from control.visualizer               import draw
+from control.comm                     import send_command
 
 #  UDP 설정 
 LISTEN_IP   = "0.0.0.0"
@@ -29,6 +29,7 @@ while True:
         if frame is None:
             continue
 
+        #frame = cv2.resize(frame, (640, 480))
         # 제스처 인식
         event, g_dbg = get_gesture(frame)
 
@@ -46,7 +47,7 @@ while True:
         if fsm.state in (State.FOLLOW, State.LOST):
             # LOST 상태에서도 감지 시도 — 재발견 가능성 있음
             msg, t_dbg = get_person_target(frame)
-
+            print("[TRACK RESULT]", msg)
             if msg == "END":
                 fsm.dispatch(Event.END)
                 cmd = "END"

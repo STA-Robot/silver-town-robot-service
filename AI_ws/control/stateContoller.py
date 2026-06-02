@@ -32,6 +32,7 @@ class StateController:
             },
             State.END: {
                 # 아무 이벤트도 받지 않음 — 종료 상태
+                Event.FOLLOW: self._to_follow,
             },
         }
 
