@@ -11,6 +11,12 @@ STATE_COLOR = {
     "FOLLOW": (0, 220,   0),
     "END":    (0,   0, 220),
 }
+# 제스처별 표시 색상 (BGR)
+GESTURE_COLOR = {
+    "Scissors": (0,   220,   0),   # 초록  — FOLLOW
+    "Paper":    (0,   200, 255),   # 노랑  — STOP
+    "Rock":     (0,     0, 220),   # 빨강  — END
+}
 
 FONT      = cv2.FONT_HERSHEY_SIMPLEX
 FONT_BOLD = cv2.FONT_HERSHEY_DUPLEX

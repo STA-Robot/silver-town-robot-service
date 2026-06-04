@@ -1,10 +1,19 @@
 import sys
+import os
+import yaml
+
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
     QGridLayout, QTableWidget, QTableWidgetItem, QFrame, QScrollArea, QHeaderView, QSizePolicy
 )
 from PyQt5.QtCore import Qt
 
+from pyqt_monitor.ViewerController import ViewerController
+
+_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+)
+_config_path     = os.path.join(_root, "videoReceiv", "config.yaml")
 
 class RobotItem(QWidget):
     def __init__(self, robot_id):
@@ -97,6 +106,13 @@ class ControlUI(QWidget):
         # ---------------------------
         # 3. ROBOT STATE
         # ---------------------------
+        # config.yaml 에서 로봇 목록 로드
+        with open(_config_path) as f:
+            cfg = yaml.safe_load(f)
+        self.robots = cfg["robots"]  # [{id, ip, domain_id}, ...]
+        # ViewerController 생성
+        self.viewer_ctrl = ViewerController(self)
+
         self.robot_frame = QFrame()
         self.robot_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
         self.robot_layout = QVBoxLayout()
@@ -111,8 +127,9 @@ class ControlUI(QWidget):
         self.robot_list_container.setSpacing(0)
 
         # 예시 로봇 4개 등록
-        for i in range(4):
-            item = RobotItem(i)
+        for robot in self.robots:
+            item = RobotItem(robot["id"])
+            item.view_btn.clicked.connect(lambda _, ip=robot["ip"]: self.viewer_ctrl.on_view(ip))
             self.robot_list_container.addWidget(item)
         
         # 스크롤 영역 내부가 남을 때 아이템들을 위로 밀착시키기 위한 Stretch
@@ -168,6 +185,7 @@ class ControlUI(QWidget):
         self.setLayout(main_layout)
         # 전체 백그라운드 색상 지정 (컴포넌트 간 틈새 색상)
         self.setStyleSheet("background-color: #f0f0f0;") 
+
 
         # (테스트용 임시 코드) 함수가 잘 작동하는지 가짜 로그 20개 넣어보기
         for i in range(20):

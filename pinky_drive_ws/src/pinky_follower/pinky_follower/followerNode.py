@@ -11,9 +11,13 @@ class FollowerNode(Node):
     def __init__(self):
         super().__init__('follower_node')
 
+        self.declare_parameter('robot_ip', "192.168.4.1")
+        self.robot_ip = self.get_parameter('robot_ip').value
+       
+        self.target_pub = self.create_publisher(String, '/ai_target', 10)
         self.pub       = self.create_publisher(Twist,  '/cmd_vel',      10)
         self.event_pub = self.create_publisher(String, '/follow_event', 10)
-
+        
         # State flags
         self.running = False
         self._is_ended    = False
@@ -62,6 +66,12 @@ class FollowerNode(Node):
         #     self.running = False
         #     self.pub.publish(Twist())
 
+    # START IP Pub 
+    def _on_Start_With_IP(self):
+        self.get_logger().info("Start_With_IP")
+        msg = String()
+        msg.data = self.robot_ip
+        self.target_pub.publish(msg)
 
     # UDP 메시지 콜백 
     def _on_udp_message(self, msg):

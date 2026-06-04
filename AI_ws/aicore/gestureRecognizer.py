@@ -15,12 +15,6 @@ GESTURE_MAPPING = {
     "Scissors": Event.FOLLOW,
 }
  
-# 제스처별 표시 색상 (BGR)
-GESTURE_COLOR = {
-    "Scissors": (0,   220,   0),   # 초록  — FOLLOW
-    "Paper":    (0,   200, 255),   # 노랑  — STOP
-    "Rock":     (0,     0, 220),   # 빨강  — END
-}
 CONF_THRESHOLD = 0.60
 
 # 투표 설정- 순시간에 지나가는 제스처 무시 3프레임 까지 같은 동작
