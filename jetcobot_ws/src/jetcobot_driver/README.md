@@ -5,7 +5,7 @@
 JetCobot 관련 런타임은 두 ROS 2 패키지로 나뉩니다.
 
 - `trajectory_action_server`: `/arm_controller/follow_joint_trajectory`, `/gripper_controller/follow_joint_trajectory` action goal을 받아 실제 로봇에 관절/그리퍼 명령을 보냅니다.
-- `jetcobot_manager`: RMF 또는 상위 workcell 노드가 보내는 `/command`를 받아 `MoveGroup` action(`/move_action`)으로 pick-and-place 시퀀스를 실행하고, 결과를 `/state`로 publish합니다.
+- `jetcobot_manager`: RMF 또는 상위 workcell 노드가 보내는 `/command`를 받아 pick-and-place 시퀀스를 실행하고, 결과를 `/state`로 publish합니다. Arm target은 `MoveGroup` action(`/move_action`)으로 보내고, gripper target은 `/gripper_controller/follow_joint_trajectory`로 직접 보냅니다.
 
 ## 빌드
 
@@ -103,8 +103,8 @@ string payload_json
 
 | command_type | 동작 |
 | --- | --- |
-| `pick_and_place` | `arm_manager.yaml`의 `pick_and_place_sequence`를 순서대로 실행합니다. 각 step은 MoveIt `MoveGroup` goal로 `/move_action`에 전송됩니다. |
-| `stop` | 현재 MoveGroup goal이 있으면 cancel 요청을 보내고, arm manager 상태를 `blocked`로 바꿉니다. |
+| `pick_and_place` | `arm_manager.yaml`의 `pick_and_place_sequence`를 순서대로 실행합니다. Arm step은 MoveIt `MoveGroup` goal로 `/move_action`에 전송하고, gripper step은 `/gripper_controller/follow_joint_trajectory`에 전송합니다. |
+| `stop` | 현재 실행 중인 MoveGroup 또는 gripper trajectory goal이 있으면 cancel 요청을 보내고, arm manager 상태를 `blocked`로 바꿉니다. |
 | `reset` | 현재 goal을 cancel하고 내부 상태를 초기화한 뒤 `idle`로 돌아갑니다. |
 
 `arm_name`이 비어 있으면 모든 arm manager가 받을 수 있고, 값이 있으면 같은 `arm_name`을 가진 manager만 처리합니다.
@@ -230,7 +230,7 @@ pick_and_place_sequence:
     message: returning home
 ```
 
-각 step의 `target`은 `joint_targets`에 정의되어 있어야 합니다. arm manager는 target의 joint position을 MoveIt `moveit_msgs/action/MoveGroup` goal의 `goal_constraints`로 변환해 `/move_action`에 보냅니다.
+각 step의 `target`은 `joint_targets`에 정의되어 있어야 합니다. `group: arm` target은 MoveIt `moveit_msgs/action/MoveGroup` goal의 `goal_constraints`로 변환해 `/move_action`에 보냅니다. `group: gripper` target은 `control_msgs/action/FollowJointTrajectory` goal로 변환해 `/gripper_controller/follow_joint_trajectory`에 보냅니다.
 
 현재 기본 YAML은 smoke test용 home/ready 중심 값입니다. 실제 pick/place 위치는 현장 캘리브레이션 후 `pick_approach`, `place_approach`, gripper step 등을 활성화해서 사용해야 합니다.
 

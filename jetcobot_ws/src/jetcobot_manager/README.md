@@ -2,7 +2,7 @@
 
 RMF/workcell 명령을 JetCobot arm 동작으로 변환하는 ROS 2 Python 패키지입니다.
 
-`arm_manager` 노드는 `jetcobot_workcell_msgs/msg/WorkcellCommand`를 `/command`에서 받고, `config/arm_manager.yaml`에 정의된 pick-and-place sequence를 MoveIt `MoveGroup` action(`/move_action`)으로 실행합니다. 실행 상태와 결과는 `jetcobot_workcell_msgs/msg/WorkcellState`로 `/state`에 publish합니다.
+`arm_manager` 노드는 `jetcobot_workcell_msgs/msg/WorkcellCommand`를 `/command`에서 받고, `config/arm_manager.yaml`에 정의된 pick-and-place sequence를 실행합니다. Arm target은 MoveIt `MoveGroup` action(`/move_action`)으로 보내고, gripper target은 `/gripper_controller/follow_joint_trajectory`로 직접 보냅니다. 실행 상태와 결과는 `jetcobot_workcell_msgs/msg/WorkcellState`로 `/state`에 publish합니다.
 
 ## 빌드
 
@@ -19,7 +19,8 @@ ros2 run jetcobot_manager arm_manager --ros-args \
   -p arm_name:=jetcobot1 \
   -p command_topic:=/command \
   -p state_topic:=/state \
-  -p move_group_action:=/move_action
+  -p move_group_action:=/move_action \
+  -p gripper_action:=/gripper_controller/follow_joint_trajectory
 ```
 
 기본 config 파일은 설치된 `jetcobot_manager/config/arm_manager.yaml`입니다. 다른 파일을 쓰려면:
@@ -36,7 +37,7 @@ ros2 run jetcobot_manager arm_manager --ros-args \
 | command_type | 동작 |
 | --- | --- |
 | `pick_and_place` | `pick_and_place_sequence`를 순서대로 실행합니다. |
-| `stop` | 현재 MoveGroup goal cancel을 요청하고 상태를 `blocked`로 바꿉니다. |
+| `stop` | 현재 실행 중인 MoveGroup 또는 gripper trajectory goal cancel을 요청하고 상태를 `blocked`로 바꿉니다. |
 | `reset` | 현재 goal을 cancel하고 내부 상태를 초기화한 뒤 `idle`로 돌아갑니다. |
 
 예시:
