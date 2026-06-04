@@ -1,7 +1,7 @@
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = "jetcobot_driver"
+package_name = "jetcobot_manager"
 
 setup(
     name=package_name,
@@ -10,18 +10,18 @@ setup(
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
         ("share/" + package_name, ["package.xml"]),
-        ("share/" + package_name + "/launch", glob("launch/*.launch.py")),
+        ("share/" + package_name + "/config", glob("config/*.yaml")),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="ane",
     maintainer_email="ane@example.com",
-    description="Minimal pymycobot trajectory driver for a real JetCobot arm.",
+    description="RMF/workcell arm manager for JetCobot.",
     license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "trajectory_action_server = jetcobot_driver.trajectory_action_server:main",
+            "arm_manager = jetcobot_manager.arm_manager_node:main",
         ],
     },
 )

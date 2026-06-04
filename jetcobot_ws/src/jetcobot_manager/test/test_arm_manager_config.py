@@ -1,6 +1,9 @@
 import pytest
 
-from jetcobot_driver.arm_manager_node import ConfigError, validate_arm_manager_config
+from jetcobot_manager.arm_manager_node import (
+    ConfigError,
+    validate_arm_manager_config,
+)
 
 
 def _valid_config():

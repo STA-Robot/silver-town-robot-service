@@ -9,11 +9,14 @@ import rclpy.executors
 import yaml
 from action_msgs.msg import GoalStatus
 from ament_index_python.packages import get_package_share_directory
+from builtin_interfaces.msg import Duration
+from control_msgs.action import FollowJointTrajectory
 from jetcobot_workcell_msgs.msg import WorkcellCommand, WorkcellState
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import Constraints, JointConstraint, MoveItErrorCodes
 from rclpy.action import ActionClient
 from rclpy.node import Node
+from trajectory_msgs.msg import JointTrajectoryPoint
 
 
 STATE_UNKNOWN = "unknown"
@@ -53,7 +56,7 @@ class ConfigError(ValueError):
 
 def default_config_file() -> str:
     try:
-        share_dir = get_package_share_directory("jetcobot_driver")
+        share_dir = get_package_share_directory("jetcobot_manager")
         return str(Path(share_dir) / "config" / "arm_manager.yaml")
     except Exception:
         return ""
@@ -122,18 +125,24 @@ def validate_arm_manager_config(config: dict[str, Any]) -> dict[str, Any]:
     motion.setdefault("replan", True)
     motion.setdefault("replan_attempts", 2)
     motion.setdefault("replan_delay", 0.1)
+    motion.setdefault("gripper_server_timeout", 5.0)
+    motion.setdefault("gripper_goal_duration", 1.0)
     motion.setdefault("seconds_per_step_estimate", 3.0)
     return config
 
 
 class JetCobotArmManager(Node):
     def __init__(self):
-        super().__init__("jetcobot_arm_manager")
+        super().__init__("jetcobot_manager")
 
         self.declare_parameter("arm_name", "jetcobot1")
         self.declare_parameter("command_topic", "/command")
         self.declare_parameter("state_topic", "/state")
         self.declare_parameter("move_group_action", "/move_action")
+        self.declare_parameter(
+            "gripper_action",
+            "/gripper_controller/follow_joint_trajectory",
+        )
         self.declare_parameter("arm_group", "arm")
         self.declare_parameter("gripper_group", "gripper")
         self.declare_parameter("config_file", default_config_file())
@@ -145,6 +154,7 @@ class JetCobotArmManager(Node):
         self.command_topic = str(self.get_parameter("command_topic").value)
         self.state_topic = str(self.get_parameter("state_topic").value)
         self.move_group_action = str(self.get_parameter("move_group_action").value)
+        self.gripper_action = str(self.get_parameter("gripper_action").value)
         self.arm_group = str(self.get_parameter("arm_group").value)
         self.gripper_group = str(self.get_parameter("gripper_group").value)
         self.config_file = str(self.get_parameter("config_file").value)
@@ -179,6 +189,11 @@ class JetCobotArmManager(Node):
             MoveGroup,
             self.move_group_action,
         )
+        self._gripper_client = ActionClient(
+            self,
+            FollowJointTrajectory,
+            self.gripper_action,
+        )
         self._command_sub = self.create_subscription(
             WorkcellCommand,
             self.command_topic,
@@ -198,7 +213,8 @@ class JetCobotArmManager(Node):
         self.get_logger().info(
             f"[{self.arm_name}] arm manager ready "
             f"command=[{self.command_topic}] state=[{self.state_topic}] "
-            f"move_group=[{self.move_group_action}] config=[{self.config_file}]"
+            f"move_group=[{self.move_group_action}] "
+            f"gripper=[{self.gripper_action}] config=[{self.config_file}]"
         )
 
     def _command_callback(self, command: WorkcellCommand) -> None:
@@ -246,8 +262,7 @@ class JetCobotArmManager(Node):
         return True, ""
 
     def _handle_pick_and_place(self, command: WorkcellCommand) -> None:
-        self._accept_command(command, STATE_RESERVED)
-        self._active_command_type = COMMAND_PICK_AND_PLACE
+        self._accept_command(command, COMMAND_PICK_AND_PLACE, STATE_RESERVED)
         self._sequence_index = 0
         self._send_next_sequence_step()
 
@@ -289,9 +304,15 @@ class JetCobotArmManager(Node):
         if command.command_id:
             self._completed_command_ids.append(command.command_id)
 
-    def _accept_command(self, command: WorkcellCommand, state: str) -> None:
+    def _accept_command(
+        self,
+        command: WorkcellCommand,
+        command_type: str,
+        state: str,
+    ) -> None:
         self.command_active = True
         self.active_command_id = command.command_id
+        self._active_command_type = command_type
         self.last_command_id = command.command_id
         self.last_command_status = COMMAND_ACCEPTED
         self.mission_id = command.mission_id
@@ -349,17 +370,6 @@ class JetCobotArmManager(Node):
             )
             return
 
-        if not self._move_group_client.wait_for_server(
-            timeout_sec=float(self.config["motion"]["move_group_server_timeout"])
-        ):
-            self._finish_command(
-                self.active_command_id,
-                COMMAND_FAILED,
-                "MoveGroup action server is not ready",
-                STATE_BLOCKED,
-            )
-            return
-
         command_id = self.active_command_id
         step = sequence[self._sequence_index]
         target_name = str(step["target"])
@@ -370,6 +380,21 @@ class JetCobotArmManager(Node):
         self._update_progress()
         self._publish_state()
 
+        if self._is_gripper_target(target_name):
+            self._send_gripper_goal(command_id, target_name)
+            return
+
+        if not self._move_group_client.wait_for_server(
+            timeout_sec=float(self.config["motion"]["move_group_server_timeout"])
+        ):
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                "MoveGroup action server is not ready",
+                STATE_BLOCKED,
+            )
+            return
+
         goal = self._build_move_group_goal(target_name)
         send_future = self._move_group_client.send_goal_async(goal)
         send_future.add_done_callback(
@@ -379,6 +404,10 @@ class JetCobotArmManager(Node):
                 future,
             )
         )
+
+    def _is_gripper_target(self, target_name: str) -> bool:
+        target = self.config["joint_targets"][target_name]
+        return str(target["group"]) == "gripper"
 
     def _build_move_group_goal(self, target_name: str) -> MoveGroup.Goal:
         target = self.config["joint_targets"][target_name]
@@ -425,6 +454,56 @@ class JetCobotArmManager(Node):
             constraints.joint_constraints.append(joint_constraint)
         return constraints
 
+    def _build_gripper_goal(self, target_name: str) -> FollowJointTrajectory.Goal:
+        target = self.config["joint_targets"][target_name]
+        joint_names = [str(name) for name in self.config["joint_names"]["gripper"]]
+        positions = [float(position) for position in target["positions"]]
+        duration_sec = float(self.config["motion"]["gripper_goal_duration"])
+
+        goal = FollowJointTrajectory.Goal()
+        goal.trajectory.joint_names = joint_names
+
+        point = JointTrajectoryPoint()
+        point.positions = positions
+        point.time_from_start = self._duration_from_seconds(duration_sec)
+        goal.trajectory.points.append(point)
+        return goal
+
+    def _duration_from_seconds(self, seconds: float) -> Duration:
+        seconds = max(0.0, seconds)
+        whole_seconds = int(seconds)
+        nanoseconds = int(round((seconds - whole_seconds) * 1_000_000_000))
+        if nanoseconds >= 1_000_000_000:
+            whole_seconds += 1
+            nanoseconds -= 1_000_000_000
+
+        duration = Duration()
+        duration.sec = whole_seconds
+        duration.nanosec = nanoseconds
+        return duration
+
+    def _send_gripper_goal(self, command_id: str, target_name: str) -> None:
+        if not self._gripper_client.wait_for_server(
+            timeout_sec=float(self.config["motion"]["gripper_server_timeout"])
+        ):
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                "gripper action server is not ready",
+                STATE_BLOCKED,
+            )
+            return
+
+        goal = self._build_gripper_goal(target_name)
+        send_future = self._gripper_client.send_goal_async(goal)
+        send_future.add_done_callback(
+            lambda future: self._gripper_goal_response_callback(
+                command_id,
+                target_name,
+                future,
+            )
+        )
+
     def _move_goal_response_callback(
         self,
         command_id: str,
@@ -461,6 +540,48 @@ class JetCobotArmManager(Node):
         result_future = goal_handle.get_result_async()
         result_future.add_done_callback(
             lambda result: self._move_result_callback(
+                command_id,
+                target_name,
+                result,
+            )
+        )
+
+    def _gripper_goal_response_callback(
+        self,
+        command_id: str,
+        target_name: str,
+        future: Any,
+    ) -> None:
+        if command_id != self.active_command_id:
+            return
+
+        try:
+            goal_handle = future.result()
+        except Exception as exc:
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                f"gripper goal send failed for {target_name}: {exc}",
+                STATE_BLOCKED,
+            )
+            return
+
+        if not goal_handle.accepted:
+            self._finish_command(
+                command_id,
+                COMMAND_REJECTED,
+                f"gripper rejected target {target_name}",
+                STATE_BLOCKED,
+            )
+            return
+
+        self._current_goal_handle = goal_handle
+        self.message = f"gripper accepted target {target_name}"
+        self._publish_state()
+
+        result_future = goal_handle.get_result_async()
+        result_future.add_done_callback(
+            lambda result: self._gripper_result_callback(
                 command_id,
                 target_name,
                 result,
@@ -512,6 +633,54 @@ class JetCobotArmManager(Node):
             command_id,
             COMMAND_FAILED,
             f"MoveGroup failed target {target_name}: {detail}",
+            STATE_BLOCKED,
+        )
+
+    def _gripper_result_callback(
+        self,
+        command_id: str,
+        target_name: str,
+        future: Any,
+    ) -> None:
+        if command_id != self.active_command_id:
+            return
+
+        try:
+            action_result = future.result()
+        except Exception as exc:
+            self._finish_command(
+                command_id,
+                COMMAND_FAILED,
+                f"gripper result failed for {target_name}: {exc}",
+                STATE_BLOCKED,
+            )
+            return
+
+        self._current_goal_handle = None
+        result = action_result.result
+        if (
+            action_result.status == GoalStatus.STATUS_SUCCEEDED
+            and result.error_code == FollowJointTrajectory.Result.SUCCESSFUL
+        ):
+            self._sequence_index += 1
+            self._update_progress()
+            self._send_next_sequence_step()
+            return
+
+        if action_result.status == GoalStatus.STATUS_CANCELED:
+            self._finish_command(
+                command_id,
+                COMMAND_CANCELED,
+                f"gripper canceled target {target_name}",
+                STATE_BLOCKED,
+            )
+            return
+
+        detail = result.error_string or f"error code {result.error_code}"
+        self._finish_command(
+            command_id,
+            COMMAND_FAILED,
+            f"gripper failed target {target_name}: {detail}",
             STATE_BLOCKED,
         )
 

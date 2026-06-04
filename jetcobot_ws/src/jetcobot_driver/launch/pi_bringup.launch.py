@@ -42,7 +42,7 @@ def generate_launch_description():
                 "arm_manager_config_file",
                 default_value=PathJoinSubstitution(
                     [
-                        FindPackageShare("jetcobot_driver"),
+                        FindPackageShare("jetcobot_manager"),
                         "config",
                         "arm_manager.yaml",
                     ]
@@ -72,9 +72,9 @@ def generate_launch_description():
                 ],
             ),
             Node(
-                package="jetcobot_driver",
+                package="jetcobot_manager",
                 executable="arm_manager",
-                name="jetcobot_arm_manager",
+                name="jetcobot_manager",
                 output="screen",
                 condition=IfCondition(use_arm_manager),
                 parameters=[
