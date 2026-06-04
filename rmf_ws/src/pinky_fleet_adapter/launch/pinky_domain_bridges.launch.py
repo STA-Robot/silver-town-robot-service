@@ -8,7 +8,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    package_share = get_package_share_directory("pinky_rmf_adapter")
+    package_share = get_package_share_directory("pinky_fleet_adapter")
     default_pinky1_config = os.path.join(
         package_share, "config", "pinky1_domain_bridge.yaml"
     )

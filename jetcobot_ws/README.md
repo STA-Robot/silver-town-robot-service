@@ -60,10 +60,14 @@ source install/setup.bash
 
 ## 전체 실행 흐름
 
-분산 실행 시 노트북과 Raspberry Pi에서 같은 ROS 네트워크 설정을 사용해야 합니다. 예를 들어 양쪽 터미널에서 같은 `ROS_DOMAIN_ID`를 설정합니다.
+분산 실행 시 노트북과 Raspberry Pi에서 같은 ROS 네트워크 설정을 사용해야 합니다.
+JetCobot local domain은 RMF domain과 분리하며, 기본 예시는 `ROS_DOMAIN_ID=34`를
+사용합니다. 이 domain 안에서는 arm manager가 `/command`, `/state`를 그대로
+사용하고, RMF domain에서는 `domain_bridge`가 이를 `/jetcobot1/command`,
+`/jetcobot1/state`로 remap합니다.
 
 ```bash
-export ROS_DOMAIN_ID=30
+export ROS_DOMAIN_ID=34
 source /opt/ros/jazzy/setup.bash
 source /path/to/jetcobot_ws/install/setup.bash
 ```
@@ -111,6 +115,15 @@ ros2 launch jetcobot_driver pi_bringup.launch.py \
 | `command_topic` | `/command` | Workcell command 입력 |
 | `state_topic` | `/state` | Workcell state 출력 |
 | `move_group_action` | `/move_action` | MoveIt action 이름 |
+
+RMF와 함께 사용할 때도 JetCobot local domain의 launch 인자는 기본값을 유지한다.
+즉, `command_topic:=/command`, `state_topic:=/state`로 두고 RMF workspace의
+`jetcobot1_domain_bridge.yaml`이 아래처럼 remap한다.
+
+```text
+RMF domain 31 /jetcobot1/command -> JetCobot domain 34 /command
+JetCobot domain 34 /state        -> RMF domain 31 /jetcobot1/state
+```
 
 ### 3. 실행 상태 확인
 

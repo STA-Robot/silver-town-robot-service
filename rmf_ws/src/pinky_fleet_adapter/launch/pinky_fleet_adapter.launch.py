@@ -28,7 +28,7 @@ def _launch_adapter(context, *args, **kwargs):
 
     return [
         Node(
-            package="pinky_rmf_adapter",
+            package="pinky_fleet_adapter",
             executable="pinky_fleet_adapter",
             output="screen",
             arguments=cli_args,
@@ -37,7 +37,7 @@ def _launch_adapter(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    adapter_share = get_package_share_directory("pinky_rmf_adapter")
+    adapter_share = get_package_share_directory("pinky_fleet_adapter")
     maps_share = get_package_share_directory("rmf_maps")
 
     default_config = os.path.join(adapter_share, "config", "pinky_adapter.yaml")

@@ -10,8 +10,9 @@
 
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>jetcobot_workcell_adapter</exec_depend>
   <exec_depend>task_orchestrator</exec_depend>
-  <exec_depend>pinky_rmf_adapter</exec_depend>
+  <exec_depend>pinky_fleet_adapter</exec_depend>
   <exec_depend>rmf_maps</exec_depend>
   <exec_depend>rmf_building_map_tools</exec_depend>
   <exec_depend>rmf_task_ros2</exec_depend>

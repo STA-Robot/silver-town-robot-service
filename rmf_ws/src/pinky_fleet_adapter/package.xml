@@ -1,23 +1,21 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>task_orchestrator</name>
+  <name>pinky_fleet_adapter</name>
   <version>0.1.0</version>
-  <description>Workflow task orchestrator for service robot RMF missions.</description>
+  <description>RMF fleet adapter for Pinky robots.</description>
   <maintainer email="ane@example.com">ane</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>
 
   <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>domain_bridge</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>pinky_drive_msgs</exec_depend>
-  <exec_depend>task_msgs</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>rclpy</exec_depend>
-  <exec_depend>rmf_fleet_msgs</exec_depend>
-  <exec_depend>rmf_ingestor_msgs</exec_depend>
-  <exec_depend>rmf_task_msgs</exec_depend>
+  <exec_depend>rmf_fleet_adapter_python</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

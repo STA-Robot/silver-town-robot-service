@@ -3,7 +3,7 @@ from glob import glob
 from setuptools import setup
 
 
-package_name = "pinky_rmf_adapter"
+package_name = "pinky_fleet_adapter"
 
 setup(
     name=package_name,
@@ -24,8 +24,8 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "fleet_adapter = pinky_rmf_adapter.pinky_fleet_adapter:main",
-            "pinky_fleet_adapter = pinky_rmf_adapter.pinky_fleet_adapter:main",
+            "fleet_adapter = pinky_fleet_adapter.pinky_fleet_adapter:main",
+            "pinky_fleet_adapter = pinky_fleet_adapter.pinky_fleet_adapter:main",
         ],
     },
 )

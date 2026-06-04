@@ -9,7 +9,8 @@ from launch.substitutions import LaunchConfiguration
 
 
 def generate_launch_description():
-    adapter_share = get_package_share_directory("pinky_rmf_adapter")
+    adapter_share = get_package_share_directory("pinky_fleet_adapter")
+    workcell_adapter_share = get_package_share_directory("jetcobot_workcell_adapter")
     maps_share = get_package_share_directory("rmf_maps")
     orchestrator_share = get_package_share_directory("task_orchestrator")
 
@@ -24,7 +25,13 @@ def generate_launch_description():
     orchestrator_launch = os.path.join(
         orchestrator_share, "launch", "task_orchestrator.launch.py"
     )
+    workcell_adapter_launch = os.path.join(
+        workcell_adapter_share, "launch", "workcell_adapter.launch.py"
+    )
     default_config = os.path.join(adapter_share, "config", "pinky_adapter.yaml")
+    default_workcell_adapter_config = os.path.join(
+        workcell_adapter_share, "config", "workcell_adapter.yaml"
+    )
     default_nav_graph = os.path.join(maps_share, "nav_graphs", "0.yaml")
     default_building_map = os.path.join(
         maps_share, "maps", "rmf-test.building.yaml"
@@ -51,6 +58,12 @@ def generate_launch_description():
                 default_value=default_orchestrator_config,
             ),
             DeclareLaunchArgument("use_fleet_adapter", default_value="true"),
+            DeclareLaunchArgument("use_workcell_adapter", default_value="true"),
+            DeclareLaunchArgument(
+                "workcell_adapter_config",
+                default_value=default_workcell_adapter_config,
+            ),
+            DeclareLaunchArgument("workcell_adapter_log_level", default_value="info"),
             DeclareLaunchArgument("use_task_orchestrator", default_value="true"),
             DeclareLaunchArgument("task_orchestrator_log_level", default_value="info"),
             DeclareLaunchArgument("server_uri", default_value=""),
@@ -94,6 +107,20 @@ def generate_launch_description():
                             ),
                             "log_level": LaunchConfiguration(
                                 "task_orchestrator_log_level"
+                            ),
+                        }.items(),
+                    ),
+                    IncludeLaunchDescription(
+                        PythonLaunchDescriptionSource(workcell_adapter_launch),
+                        condition=IfCondition(
+                            LaunchConfiguration("use_workcell_adapter")
+                        ),
+                        launch_arguments={
+                            "config_file": LaunchConfiguration(
+                                "workcell_adapter_config"
+                            ),
+                            "log_level": LaunchConfiguration(
+                                "workcell_adapter_log_level"
                             ),
                         }.items(),
                     ),

@@ -41,7 +41,7 @@ Open-RMF dispatcher / task manager / traffic schedule
         |
         |  robot assignment + navigation/activity commands
         v
-pinky_rmf_adapter
+pinky_fleet_adapter
         |
         |  DriveCommand / DriveState
         v

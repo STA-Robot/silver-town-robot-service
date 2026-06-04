@@ -5,3 +5,9 @@ default_wait_seconds: 20
 warehouse_waypoint: warehouse
 return_map: L1
 return_pose: [0.15874, 0.43924, 0.0]
+storage_full_default: true
+workcell_request_topic: /ingestor_requests
+workcell_result_topic: /ingestor_results
+workcell_target_guid: warehouse_pick_place_jetcobot1
+workcell_transporter_type: pinky
+workcell_item_type_guids: [towel, medicine_box, cup]

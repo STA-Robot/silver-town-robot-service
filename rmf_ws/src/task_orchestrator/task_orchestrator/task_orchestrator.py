@@ -10,6 +10,11 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.task import Future
 from rmf_fleet_msgs.msg import FleetState
+from rmf_ingestor_msgs.msg import (
+    IngestorRequest,
+    IngestorRequestItem,
+    IngestorResult,
+)
 from rmf_task_msgs.msg import ApiRequest, ApiResponse, DispatchStates, TaskSummary
 from pinky_drive_msgs.msg import DriveCommand
 from task_msgs.srv import CancelFollow, FollowCall, TableCall
@@ -20,6 +25,12 @@ REQUESTER = "task_orchestrator"
 DEFAULT_FLEET_NAME = "pinky"
 DEFAULT_TASK_API_REQUEST_TOPIC = "task_api_requests"
 DEFAULT_TASK_API_RESPONSE_TOPIC = "task_api_responses"
+DEFAULT_WORKCELL_REQUEST_TOPIC = "/ingestor_requests"
+DEFAULT_WORKCELL_RESULT_TOPIC = "/ingestor_results"
+DEFAULT_WORKCELL_TARGET_GUID = "warehouse_pick_place_jetcobot1"
+DEFAULT_WORKCELL_TRANSPORTER_TYPE = "pinky"
+DEFAULT_WORKCELL_ITEM_TYPE_GUIDS = ["towel", "medicine_box", "cup"]
+PICK_PLACE_SUFFIX = "-pick-place"
 TASK_STATE_NAMES = {
     TaskSummary.STATE_QUEUED: "queued",
     TaskSummary.STATE_ACTIVE: "active",
@@ -46,6 +57,7 @@ class Mission:
     state: str
     assigned_robot: str | None = None
     current_rmf_task_id: str | None = None
+    current_workcell_request_id: str | None = None
     storage_full: bool | None = None
     wait_seconds: int | None = None
 
@@ -152,6 +164,28 @@ def build_follow_task(
     }
 
 
+def build_pick_place_ingestor_request(
+    mission_id: str,
+    target_guid: str = DEFAULT_WORKCELL_TARGET_GUID,
+    transporter_type: str = DEFAULT_WORKCELL_TRANSPORTER_TYPE,
+    item_type_guids: list[str] | None = None,
+    request_guid: str | None = None,
+) -> IngestorRequest:
+    request = IngestorRequest()
+    request.request_guid = request_guid or f"{mission_id}{PICK_PLACE_SUFFIX}"
+    request.target_guid = target_guid
+    request.transporter_type = transporter_type
+
+    for type_guid in item_type_guids or DEFAULT_WORKCELL_ITEM_TYPE_GUIDS:
+        item = IngestorRequestItem()
+        item.type_guid = str(type_guid)
+        item.quantity = 0
+        item.compartment_name = ""
+        request.items.append(item)
+
+    return request
+
+
 def wrap_robot_task_request(
     fleet_name: str,
     robot_name: str,
@@ -175,6 +209,12 @@ class TaskOrchestrator(Node):
         warehouse_waypoint: str = "warehouse",
         return_map: str = "L1",
         return_pose: list[float] | None = None,
+        storage_full_default: bool = True,
+        workcell_request_topic: str = DEFAULT_WORKCELL_REQUEST_TOPIC,
+        workcell_result_topic: str = DEFAULT_WORKCELL_RESULT_TOPIC,
+        workcell_target_guid: str = DEFAULT_WORKCELL_TARGET_GUID,
+        workcell_transporter_type: str = DEFAULT_WORKCELL_TRANSPORTER_TYPE,
+        workcell_item_type_guids: list[str] | None = None,
     ):
         super().__init__("task_orchestrator")
         self.fleet_name = fleet_name
@@ -184,9 +224,19 @@ class TaskOrchestrator(Node):
         self.warehouse_waypoint = warehouse_waypoint
         self.return_map = return_map
         self.return_pose = return_pose or [0.15874, 0.43924, 0.0]
+        self.storage_full_default = bool(storage_full_default)
+        self.workcell_request_topic = workcell_request_topic
+        self.workcell_result_topic = workcell_result_topic
+        self.workcell_target_guid = workcell_target_guid
+        self.workcell_transporter_type = workcell_transporter_type
+        self.workcell_item_type_guids = (
+            workcell_item_type_guids or DEFAULT_WORKCELL_ITEM_TYPE_GUIDS
+        )
         self.missions_by_id = {}
         self.missions_by_task_id = {}
+        self.missions_by_workcell_request_id = {}
         self.completed_rmf_task_ids = set()
+        self.completed_workcell_request_ids = set()
         self.pending_api_requests = {}
         self.fleet_robot_states = {}
         self.last_logged_fleet_robot_states = {}
@@ -209,6 +259,17 @@ class TaskOrchestrator(Node):
             task_api_response_topic,
             self._on_api_response,
             task_api_qos,
+        )
+        self.workcell_request_pub = self.create_publisher(
+            IngestorRequest,
+            workcell_request_topic,
+            10,
+        )
+        self.workcell_result_sub = self.create_subscription(
+            IngestorResult,
+            workcell_result_topic,
+            self._on_ingestor_result,
+            10,
         )
         self.table_call_srv = self.create_service(
             TableCall,
@@ -248,6 +309,8 @@ class TaskOrchestrator(Node):
             f"task_api_topics={task_api_request_topic},{task_api_response_topic} "
             f"wait_seconds={self.default_wait_seconds} "
             f"warehouse={self.warehouse_waypoint} "
+            f"storage_full_default={self.storage_full_default} "
+            f"workcell={self.workcell_target_guid} "
             f"return={self.return_map}:{self.return_pose} "
             f"services=/table_call,/follow_call,/cancel_follow_call"
         )
@@ -416,10 +479,44 @@ class TaskOrchestrator(Node):
 
     def check_storage(self, mission: Mission) -> None:
         # TODO: Connect real Pinky storage state and set mission.storage_full.
-        mission.storage_full = False
+        mission.storage_full = self.storage_full_default
         self.get_logger().debug(
             f"storage check mission={mission.mission_id} "
             f"storage_full={mission.storage_full}"
+        )
+
+    def submit_pick_place_workcell_request(
+        self,
+        mission: Mission,
+        target_guid: str | None = None,
+    ) -> None:
+        if mission.current_workcell_request_id:
+            self.get_logger().debug(
+                f"workcell request already active mission={mission.mission_id} "
+                f"request_guid={mission.current_workcell_request_id}"
+            )
+            return
+
+        request = build_pick_place_ingestor_request(
+            mission_id=mission.mission_id,
+            target_guid=target_guid or self.workcell_target_guid,
+            transporter_type=self.workcell_transporter_type,
+            item_type_guids=self.workcell_item_type_guids,
+        )
+        request.time = self.get_clock().now().to_msg()
+
+        mission.current_workcell_request_id = request.request_guid
+        self.missions_by_workcell_request_id[request.request_guid] = mission
+        self.workcell_request_pub.publish(request)
+        self._log_mission_transition(
+            mission,
+            "workcell_request_submitted",
+            f"request_guid={request.request_guid} target={request.target_guid}",
+        )
+        self.get_logger().info(
+            f"published workcell request mission={mission.mission_id} "
+            f"request_guid={request.request_guid} target={request.target_guid} "
+            f"items={[item.type_guid for item in request.items]}"
         )
 
     def submit_warehouse_task(self, mission: Mission) -> None:
@@ -759,7 +856,7 @@ class TaskOrchestrator(Node):
 
     def on_warehouse_task_completed(self, mission: Mission) -> None:
         self._log_mission_transition(mission, "warehouse_task_completed")
-        # TODO: Submit or observe the robot-arm ingestor/workcell task.
+        self.submit_pick_place_workcell_request(mission)
 
     def on_workcell_done(
         self,
@@ -776,6 +873,47 @@ class TaskOrchestrator(Node):
             f"workcell failed mission={mission.mission_id}: {message}"
         )
         # TODO: Add intervention workflow for workcell failures.
+
+    def _on_ingestor_result(self, msg: IngestorResult) -> None:
+        mission = self.missions_by_workcell_request_id.get(msg.request_guid)
+        if mission is None:
+            self.get_logger().debug(
+                f"ignore ingestor result for unknown request_guid={msg.request_guid}"
+            )
+            return
+
+        if msg.status == IngestorResult.ACKNOWLEDGED:
+            self.get_logger().info(
+                f"workcell acknowledged mission={mission.mission_id} "
+                f"request_guid={msg.request_guid}"
+            )
+            return
+
+        if msg.request_guid in self.completed_workcell_request_ids:
+            self.get_logger().debug(
+                f"duplicate final workcell result request_guid={msg.request_guid}"
+            )
+            return
+
+        self.completed_workcell_request_ids.add(msg.request_guid)
+        self.missions_by_workcell_request_id.pop(msg.request_guid, None)
+        mission.current_workcell_request_id = None
+        success = msg.status == IngestorResult.SUCCESS
+        if msg.status not in (IngestorResult.SUCCESS, IngestorResult.FAILED):
+            self.get_logger().warning(
+                f"unexpected workcell result status={msg.status} "
+                f"request_guid={msg.request_guid}"
+            )
+            success = False
+
+        self.on_workcell_done(
+            mission,
+            success=success,
+            message=(
+                f"workcell result status={msg.status} "
+                f"source_guid={msg.source_guid}"
+            ),
+        )
 
     def _log_mission_transition(
         self,
@@ -1122,6 +1260,28 @@ def main(argv=sys.argv):
         ),
         return_map=str(config.get("return_map", "L1")),
         return_pose=list(config.get("return_pose", [0.15874, 0.43924, 0.0])),
+        storage_full_default=bool(config.get("storage_full_default", True)),
+        workcell_request_topic=str(
+            config.get("workcell_request_topic", DEFAULT_WORKCELL_REQUEST_TOPIC)
+        ),
+        workcell_result_topic=str(
+            config.get("workcell_result_topic", DEFAULT_WORKCELL_RESULT_TOPIC)
+        ),
+        workcell_target_guid=str(
+            config.get("workcell_target_guid", DEFAULT_WORKCELL_TARGET_GUID)
+        ),
+        workcell_transporter_type=str(
+            config.get(
+                "workcell_transporter_type",
+                DEFAULT_WORKCELL_TRANSPORTER_TYPE,
+            )
+        ),
+        workcell_item_type_guids=list(
+            config.get(
+                "workcell_item_type_guids",
+                DEFAULT_WORKCELL_ITEM_TYPE_GUIDS,
+            )
+        ),
     )
 
     if args.table_waypoint:
