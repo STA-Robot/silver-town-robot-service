@@ -7,8 +7,8 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui  import QImage, QPixmap
 from visualizer import draw as draw_visualizer
 
-from ai_ws.ai_ws.AIController import get_active_robot, get_latest_debug
-from video_receiver.video_receiver import get_frame
+from ai_controller.ai_controller.AIController import get_active_robot, get_latest_debug
+from libs.video_receiver import VideoReceiver# 경로이상 
 
 class ViewerController:
     """
@@ -43,7 +43,7 @@ class ViewerController:
         active_ip = get_active_robot()
         is_ai     = (self.viewed_ip == active_ip)
 
-        frame = get_frame(self.viewed_ip)
+        frame = VideoReceiver.get_frame(self.viewed_ip)
         if frame is None:
             self.ui.viewer.setText("NO SIGNAL")
             return

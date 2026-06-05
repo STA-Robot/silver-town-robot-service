@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 from collections import deque, Counter
 from ultralytics import YOLO
-from ai_ws.ai_ws.stateContoller import Event
+from ..stateContoller import Event
 import os
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
