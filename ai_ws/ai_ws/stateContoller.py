@@ -62,3 +62,6 @@ class StateController:
     def _to_end(self):
         self.state = State.END
         print(f"[FSM] → END")
+
+    def reset(self):
+        self.__init__()  # 내부에서 호출하는 건 괜찮음

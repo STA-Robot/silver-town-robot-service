@@ -1,4 +1,5 @@
 import rclpy
+import json
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
@@ -12,7 +13,10 @@ class FollowerNode(Node):
         super().__init__('follower_node')
 
         self.declare_parameter('robot_ip', "192.168.4.1")
+        self.declare_parameter('robot_port', "9998")
+
         self.robot_ip = self.get_parameter('robot_ip').value
+        self.robot_port = self.get_parameter('robot_port').value
        
         self.target_pub = self.create_publisher(String, '/ai_target', 10)
         self.pub       = self.create_publisher(Twist,  '/cmd_vel',      10)
@@ -27,7 +31,7 @@ class FollowerNode(Node):
 
         # 이벤트 드리븐: 메시지 도착 즉시 _on_udp_message() 호출
         self.udp = UDPReceiver(
-            port=9998,
+            port=self.robot_port,
             logger=self.get_logger(),
             on_message=self._on_udp_message
         )
@@ -69,8 +73,10 @@ class FollowerNode(Node):
     # START IP Pub 
     def _on_Start_With_IP(self):
         self.get_logger().info("Start_With_IP")
+        data={"ip":self.robot_ip,
+              "port":self.robot_port}
         msg = String()
-        msg.data = self.robot_ip
+        msg.data = json.dumps(data)
         self.target_pub.publish(msg)
 
     # UDP 메시지 콜백 

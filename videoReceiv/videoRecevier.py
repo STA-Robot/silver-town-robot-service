@@ -19,7 +19,7 @@ class VideoReceiver:
 
         # 등록된 로봇 IP 목록 (허용 목록)
         self.robot_map = {
-            r["ip"]: r["id"] for r in cfg["robots"]
+            r["robot_ip"]: r["robot_name"] for r in cfg["robots"]
         }  # {"192.168.1.10": "robot_1", ...}
 
         # 최신 프레임 저장 {robot_ip: {"frame": np.ndarray, "time": float}}
@@ -66,20 +66,11 @@ class VideoReceiver:
         sock.close()
 
     def get_frame(self, robot_ip: str):
-        """특정 로봇 IP의 최신 프레임 반환"""
         with self.lock:
             entry = self.latest_frames.get(robot_ip)
             if entry:
                 return entry["frame"]
         return None
-
-    # def get_all_frames(self) -> dict:
-    #     """모든 로봇 프레임 반환 {robot_ip: frame}"""
-    #     with self.lock:
-    #         return {
-    #             ip: entry["frame"]
-    #             for ip, entry in self.latest_frames.items()
-    #         }
 
     def is_timeout(self, robot_ip: str, timeout=2.0) -> bool:
         with self.lock:
@@ -89,7 +80,6 @@ class VideoReceiver:
         return True
 
     def get_robot_id(self, robot_ip: str) -> str:
-        """IP → robot_id 변환"""
         return self.robot_map.get(robot_ip, "unknown")
 
     def close(self):

@@ -2,23 +2,16 @@
 from dataclasses import dataclass
 import threading
 from typing import Optional
-import yaml
+import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from stateContoller import StateController, State, Event
+from ai_ws.ai_ws.stateContoller import StateController, State, Event
 from aicore.gestureRecognizer import get_gesture,GestureDebugInfo
 from aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
 from videoReceiv import VideoReceiver
-from comm import send_command
-
-# ── 설정 로드 ─────────────────────────────────────────────────
-# with open("config.yaml") as f:
-#     cfg = yaml.safe_load(f)
-
-# server_cfg   = cfg["server"]
-# COMMAND_PORT = server_cfg["command_port"]
+from comm import send_command,set_target
 
 # ── VideoReceiver (mainWindow과 공유) ─────────────────────────
 video_receiver = VideoReceiver()
@@ -60,7 +53,7 @@ def set_active_robot(ip: str):
         _active_robot_ip = ip
         prev_msg         = None
         global_tracker.reset()
-        fsm.__init__()
+        fsm.reset()
 
 
 # ── TaskManager 토픽 구독 (ROS2) ─────────────────────────────
@@ -77,11 +70,18 @@ class AITargetSubscriber(Node):
         self.timer = self.create_timer(0.1, self.process)# 10fps
 
     def _on_target(self, msg: String):
-        robot_ip = msg.data.strip()
-        self.current_ip = robot_ip  
-        set_active_robot(robot_ip)
+        try:
+            data = json.loads(msg.data)
 
-    
+            robot_ip = data["ip"]
+            port = int(data["port"])
+            set_target(robot_ip,port)
+            self.current_ip = robot_ip  
+            set_active_robot(robot_ip)
+
+        except Exception as e:
+                print(f"[ERROR] JSON parse failed: {e}")
+
     def process(self):
         global prev_msg, _latest_debug
 
@@ -99,7 +99,9 @@ class AITargetSubscriber(Node):
         event, g_dbg = get_gesture(frame)
         fsm.dispatch(event)
 
-        if fsm.did_change() and fsm.state == State.FOLLOW:
+        changed = fsm.did_change()
+
+        if changed and fsm.state == State.FOLLOW:
             global_tracker.reset()
 
         t_dbg = TrackDebugInfo()
@@ -121,7 +123,7 @@ class AITargetSubscriber(Node):
                     fsm.dispatch(Event.FOLLOW)
                 cmd = msg
         else:
-            if fsm.did_change():
+            if changed:
                 cmd = fsm.state
 
         with _state_lock:

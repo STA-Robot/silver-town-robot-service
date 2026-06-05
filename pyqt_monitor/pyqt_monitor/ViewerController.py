@@ -12,14 +12,14 @@ _root = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..")
 )
 for _p in [
-    os.path.join(_root, "AI_ws", "control"),
+    os.path.join(_root, "ai_ws", "ai_ws"),
     os.path.join(_root, "videoReceiv"),
 ]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from AI_ws.control.AIController import get_active_robot, get_latest_debug, video_receiver
-
+from ai_ws.ai_ws.AIController import get_active_robot, get_latest_debug
+from videoReceiv.videoRecevier import get_frame
 
 class ViewerController:
     """
@@ -54,7 +54,7 @@ class ViewerController:
         active_ip = get_active_robot()
         is_ai     = (self.viewed_ip == active_ip)
 
-        frame = video_receiver.get_frame(self.viewed_ip)
+        frame = get_frame(self.viewed_ip)
         if frame is None:
             self.ui.viewer.setText("NO SIGNAL")
             return
