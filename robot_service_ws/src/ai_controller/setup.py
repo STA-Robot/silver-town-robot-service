@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'ai_ws'
+package_name = 'ai_controller'
 
 setup(
     name=package_name,

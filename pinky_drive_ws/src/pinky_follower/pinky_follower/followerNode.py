@@ -63,12 +63,9 @@ class FollowerNode(Node):
             if self.timeout_timer.is_canceled():
                 self.timeout_timer.reset()
 
+            self._on_Start_With_IP()
             self.running = True
 
-        # elif msg.data == "stop":# rmf에서 상태가 변경된 최종 받아야하나?
-        #     self.get_logger().info("FOLLOW STOP")
-        #     self.running = False
-        #     self.pub.publish(Twist())
 
     # START IP Pub 
     def _on_Start_With_IP(self):
@@ -78,6 +75,7 @@ class FollowerNode(Node):
         msg = String()
         msg.data = json.dumps(data)
         self.target_pub.publish(msg)
+        self.get_logger().info("Start_With_IP"+{data})
 
     # UDP 메시지 콜백 
     def _on_udp_message(self, msg):

@@ -7,19 +7,8 @@ from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui  import QImage, QPixmap
 from visualizer import draw as draw_visualizer
 
-# ── 프로젝트 루트 경로 ────────────────────────────────────────
-_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
-for _p in [
-    os.path.join(_root, "ai_ws", "ai_ws"),
-    os.path.join(_root, "videoReceiv"),
-]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
 from ai_ws.ai_ws.AIController import get_active_robot, get_latest_debug
-from videoReceiv.videoRecevier import get_frame
+from video_receiver.video_receiver import get_frame
 
 class ViewerController:
     """

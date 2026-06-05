@@ -9,7 +9,7 @@ import yaml
 
 class VideoReceiver:
     #송신자 IP로 어느 로봇인지 식별 → latest_frames 딕셔너리로 관리.
-    def __init__(self, config_path="config.yaml"):
+    def __init__(self, config_path="config/config.yaml"):
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
 
