@@ -1,5 +1,5 @@
 server:
-  ip: "0.0.0.0"          # AI 서버 수신 IP (0.0.0.0 = 모든 인터페이스)
+  server_ip: "0.0.0.0"          # AI 서버 수신 IP (0.0.0.0 = 모든 인터페이스)
   video_port: 9999       # 영상 수신 포트 (로봇 4대 공통)
   
 
@@ -8,22 +8,15 @@ robots:
   - robot_name: "robot_1"
     robot_ip: "192.168.4.1"   
     robot_port: "9998"   
-    robot_domain_id: 31
-
 
   - robot_name: "robot_2"
     robot_ip: "192.168.4.3"    
     robot_port: "9997"  
-    robot_domain_id: 32
-
 
   - robot_name: "robot_3"
     robot_ip: "192.168.4.4"   
     robot_port: "9996"    
-    robot_domain_id: 33
-
 
   - robot_name: "robot_4"
     robot_ip: "192.168.4.5"    
     robot_port: "9995"    
-    robot_domain_id: 34

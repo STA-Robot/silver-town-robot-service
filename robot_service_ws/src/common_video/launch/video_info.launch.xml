@@ -1,0 +1,13 @@
+<?xml version='1.0' ?>
+
+<launch>
+    <arg name="server_ip" default="0.0.0.0"/>
+    <arg name="video_port" default="9999"/>
+
+    <node pkg="common_video" exec="videoNode">
+        <param from="$(find-pkg-share common_video)/config/video_config.yaml"/>
+        <param name="server_ip" value="$(var server_ip)"/>
+        <param name="video_port" value="$(var video_port)"/>
+    </node>
+
+</launch>

@@ -212,8 +212,4 @@ class ControlUI(QWidget):
         # 4. 스크롤을 맨 아래로 이동 (새 로그 추적)
         self.event_table.scrollToBottom()
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = ControlUI()
-    window.show()
-    sys.exit(app.exec_())
+

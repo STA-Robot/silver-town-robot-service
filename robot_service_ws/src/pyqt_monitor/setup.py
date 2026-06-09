@@ -24,7 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-             'QTlayout = pyqt_monitor.QTlayout:main',
+             'pyqt_monitor = pyqt_monitor.main:main',
         ],
     },
 )

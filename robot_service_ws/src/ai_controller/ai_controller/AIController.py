@@ -1,148 +1,186 @@
-# AIController.py
-from dataclasses import dataclass
-import threading
-from typing import Optional
+"""
+ai_controller_node.py
+
+/ai_target 토픽 수신 → 해당 로봇 CompressedImage 구독 → YOLO 추론 → /ai/image_result 발행
+발행 타입도 CompressedImage (imencode → bytes 그대로 실음)
+"""
+
 import json
+import threading
+from dataclasses import dataclass
+from typing import Optional
+
+import cv2
+import numpy as np
+
 import rclpy
 from rclpy.node import Node
+from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 
-from .stateContoller import StateController, State, Event
-from .aicore.gestureRecognizer import get_gesture,GestureDebugInfo
-from .aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
-from common_video.videoRecevier import VideoReceiver
-from .robot_comm import send_command,set_target
-
-# ── VideoReceiver (mainWindow과 공유) ─────────────────────────
-video_receiver = VideoReceiver()
-
-@dataclass
-class AIDebugInfo:
-    state: str
-    gesture: Optional[GestureDebugInfo]
-    track: Optional[TrackDebugInfo]
-
-# ── 공유 상태 (mainWindow에서 읽어감) ────────────────────────
-_active_robot_ip  = None
-_latest_debug: Optional[AIDebugInfo] = None
-_state_lock       = threading.Lock()
-
-fsm      = StateController()
-prev_msg = None
-
-def get_active_robot() -> str:
-    """mainWindow에서 현재 추론 대상 IP 조회"""
-    with _state_lock:
-        return _active_robot_ip
-
-def get_latest_debug() -> Optional[AIDebugInfo]:
-    with _state_lock:
-        return _latest_debug
-
-def set_active_robot(ip: str):
-    """
-    TaskManager ROS2 토픽 수신 시 호출.
-    추론 대상 로봇 IP 지정 + 상태 초기화.
-    """
-    global prev_msg
-    with _state_lock:
-        global _active_robot_ip
-        if _active_robot_ip == ip:
-            return
-        print(f"[AIController] 추론 대상: {_active_robot_ip} → {ip}")
-        _active_robot_ip = ip
-        prev_msg         = None
-        global_tracker.reset()
-        fsm.reset()
+from stateContoller import StateController, State, Event
+from aicore.gestureRecognizer import get_gesture, GestureDebugInfo
+from aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
+from robot_comm import send_command, set_target
+from visualizer import draw as draw_visualizer
 
 
-# ── TaskManager 토픽 구독 (ROS2) ─────────────────────────────
-class AITargetSubscriber(Node):
+class AIControllerNode(Node):
+
     def __init__(self):
         super().__init__('ai_controller_node')
 
-        self.current_ip = None
+        self.lock = threading.Lock()
 
-        self.sub = self.create_subscription(
-            String, '/ai_target', self._on_target, 10
+        # ── 상태 ───────────────────────────────────────────────
+        self._current_ip:   Optional[str]         = None
+        self._image_sub:    Optional[object]      = None
+        self.prev_msg:      Optional[str]         = None
+        self.fsm = StateController()
+
+        # ── 추론 결과 퍼블리셔 (CompressedImage) ──────────────
+        self.result_pub = self.create_publisher(
+            CompressedImage, '/ai/image_result', 10
         )
 
-        self.timer = self.create_timer(0.1, self.process)# 10fps
+        # ── AI 추론 대상 구독 ──────────────────────────────────
+        self.create_subscription(
+            String, '/ai_target', self._on_ai_target, 10
+        )
 
-    def _on_target(self, msg: String):
+        self.get_logger().info("[AIControllerNode] 시작")
+
+    # ── 외부 조회 ─────────────────────────────────────────────
+
+    def get_active_robot_ip(self) -> Optional[str]:
+        with self.lock:
+            return self._current_ip
+
+    # ── TaskManager 콜백 ───────────────────────────────────────
+
+    def _on_ai_target(self, msg: String):
         try:
-            data = json.loads(msg.data)
-
+            data     = json.loads(msg.data)
             robot_ip = data["ip"]
-            port = int(data["port"])
-            set_target(robot_ip,port)
-            self.current_ip = robot_ip  
-            set_active_robot(robot_ip)
+            port     = int(data["port"])
+            active   = data.get("active", True)
 
+            if active:
+                self._start_inference(robot_ip, port)
+            else:
+                self._stop_inference()
         except Exception as e:
-                print(f"[ERROR] JSON parse failed: {e}")
+            self.get_logger().error(f"[ai_target 파싱 오류] {e}")
 
-    def process(self):
-        global prev_msg, _latest_debug
+    def _start_inference(self, robot_ip: str, port: int):
+        with self.lock:
+            if self._current_ip == robot_ip:
+                return
+            self.get_logger().info(f"[AI] 추론 대상: {self._current_ip} → {robot_ip}")
+            self._destroy_image_sub()
+            self._current_ip = robot_ip
+            self.prev_msg    = None
+            global_tracker.reset()
+            self.fsm.reset()
+            set_target(robot_ip, port)
 
-        if self.current_ip is None:
-            return
+        topic = f'/robot_{robot_ip.replace(".", "_")}/image/compressed'
+        self._image_sub = self.create_subscription(
+            CompressedImage, topic, self._on_frame, 10
+        )
+        self.get_logger().info(f"[AI] 구독 시작: {topic}")
 
-        if video_receiver.is_timeout(self.current_ip):
-            return
+    def _stop_inference(self):
+        with self.lock:
+            self.get_logger().info(f"[AI] 추론 중단: {self._current_ip}")
+            self._destroy_image_sub()
+            self._current_ip   = None
+            self._latest_debug = None
+            self.prev_msg      = None
+            global_tracker.reset()
+            self.fsm.reset()
 
-        frame = video_receiver.get_frame(self.current_ip)
+    def _destroy_image_sub(self):
+        if self._image_sub is not None:
+            self.destroy_subscription(self._image_sub)
+            self._image_sub = None
+
+    # ── 추론 콜백 ──────────────────────────────────────────────
+
+    def _on_frame(self, ros_msg: CompressedImage):
+        # CompressedImage → numpy (imdecode 한 번만)
+        frame = cv2.imdecode(
+            np.frombuffer(ros_msg.data, np.uint8),
+            cv2.IMREAD_COLOR
+        )
         if frame is None:
             return
 
-        # 기존 AI 로직 그대로
+        with self.lock:
+            if self._current_ip is None:
+                return
+
+        # ── AI 로직 ────────────────────────────────────────────
         event, g_dbg = get_gesture(frame)
-        fsm.dispatch(event)
+        self.fsm.dispatch(event)
 
-        changed = fsm.did_change()
-
-        if changed and fsm.state == State.FOLLOW:
+        changed = self.fsm.did_change()
+        if changed and self.fsm.state == State.FOLLOW:
             global_tracker.reset()
 
         t_dbg = TrackDebugInfo()
         cmd   = None
 
-        if fsm.state in (State.FOLLOW, State.LOST):
-            msg, t_dbg = get_person_target(frame)
+        if self.fsm.state in (State.FOLLOW, State.LOST):
+            msg_str, t_dbg = get_person_target(frame)
 
-            if msg == "END":
-                fsm.dispatch(Event.END)
-                cmd = "END"
-            elif msg == "LOST":
-                fsm.dispatch(Event.LOST)
-                cmd = "LOST"
-            elif msg == "STOP":
+            if msg_str == "END":
+                self.fsm.dispatch(Event.END);  cmd = "END"
+            elif msg_str == "LOST":
+                self.fsm.dispatch(Event.LOST); cmd = "LOST"
+            elif msg_str == "STOP":
                 cmd = "STOP"
             else:
-                if fsm.state == State.LOST:
-                    fsm.dispatch(Event.FOLLOW)
-                cmd = msg
+                if self.fsm.state == State.LOST:
+                    self.fsm.dispatch(Event.FOLLOW)
+                cmd = msg_str
         else:
             if changed:
-                cmd = fsm.state
-
-        with _state_lock:
-            _latest_debug = AIDebugInfo(
-                state=fsm.state,
-                gesture=g_dbg,
-                track=t_dbg
-            )
+                cmd = self.fsm.state
 
         if cmd is not None:
             is_follow = isinstance(cmd, str) and cmd.startswith("FOLLOW")
-
-            if is_follow or cmd != prev_msg:
+            if is_follow or cmd != self.prev_msg:
                 send_command(cmd)
-                prev_msg = cmd
+                self.prev_msg = cmd
+
+        # ── 추론 결과 발행 (GUI 구독 중일 때만) ───────────────
+        if self.result_pub.get_subscription_count() == 0:
+            return
+
+        # visualizer로 바운딩박스·상태·방향 오버레이
+        annotated = draw_visualizer(
+            frame.copy(),       # 원본 frame 보존
+            self.fsm.state,
+            g_dbg,
+            t_dbg
+        )
+
+        # annotated numpy → JPEG bytes → CompressedImage
+        ok, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            return
+
+        result_msg             = CompressedImage()
+        result_msg.header.stamp = self.get_clock().now().to_msg()
+        result_msg.format      = "jpeg"
+        result_msg.data        = buf.tobytes()
+        self.result_pub.publish(result_msg)
+
 
 def main(args=None):
     rclpy.init(args=args)
-    node = AITargetSubscriber()
+    node = AIControllerNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
