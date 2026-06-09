@@ -5,7 +5,7 @@ from ultralytics import YOLO
 import cv2
 import numpy as np
 from collections import defaultdict
-import os
+
 
 TARGET_CLASS    = "doll"
 REID_WEIGHT     = 0.6
@@ -16,9 +16,12 @@ LOST_END_FRAMES = 600  # 약 60초 (10fps 기준) → END 전송 기준
 H_BINS          = 36
 S_BINS          = 32
 TORSO_RATIO     = (0.15, 0.65)
+import os
+from ament_index_python.packages import get_package_share_directory
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(current_dir, "..", "models", "doll_best.pt")
+pkg_path = get_package_share_directory('ai_controller')
+model_path = os.path.join(pkg_path, 'models', 'gesture_best.pt')
+
 person_model = YOLO(model_path)
 
 

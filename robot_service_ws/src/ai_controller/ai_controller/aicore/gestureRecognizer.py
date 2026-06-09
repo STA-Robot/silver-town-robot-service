@@ -4,9 +4,10 @@ from collections import deque, Counter
 from ultralytics import YOLO
 from ..stateContoller import Event
 import os
+from ament_index_python.packages import get_package_share_directory
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(current_dir, "..", "models", "gesture_best.pt")
+pkg_path = get_package_share_directory('ai_controller')
+model_path = os.path.join(pkg_path, 'models', 'gesture_best.pt')
 gesture_model = YOLO(model_path)
 
 GESTURE_MAPPING = {

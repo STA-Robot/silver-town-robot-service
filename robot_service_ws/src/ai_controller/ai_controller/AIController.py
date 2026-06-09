@@ -7,11 +7,11 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from stateContoller import StateController, State, Event
-from aicore.gestureRecognizer import get_gesture,GestureDebugInfo
-from aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
-from libs.video_receiver import VideoReceiver# 경로이상 
-from comm import send_command,set_target
+from .stateContoller import StateController, State, Event
+from .aicore.gestureRecognizer import get_gesture,GestureDebugInfo
+from .aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
+from common_video.videoRecevier import VideoReceiver
+from .robot_comm import send_command,set_target
 
 # ── VideoReceiver (mainWindow과 공유) ─────────────────────────
 video_receiver = VideoReceiver()

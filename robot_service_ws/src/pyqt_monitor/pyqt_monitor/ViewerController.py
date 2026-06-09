@@ -1,20 +1,15 @@
 # pyqt_monitor/pyqt_monitor/ViewerController.py
-import sys
-import os
+
 import cv2
-import yaml
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui  import QImage, QPixmap
-from visualizer import draw as draw_visualizer
+from .visualizer import draw as draw_visualizer
 
-from ai_controller.ai_controller.AIController import get_active_robot, get_latest_debug
-from libs.video_receiver import VideoReceiver# 경로이상 
+from ai_controller.AIController import get_active_robot, get_latest_debug
+from common_video.videoRecevier import VideoReceiver 
 
 class ViewerController:
-    """
-    QTlayout.py 에서 view_btn 클릭 시 on_view(ip) 를 직접 호출.
-    ViewerController는 IP만 받아서 프레임 조회 + 표시만 담당.
-    """
+
     def __init__(self, ui):
         self.ui        = ui
         self.viewed_ip = None

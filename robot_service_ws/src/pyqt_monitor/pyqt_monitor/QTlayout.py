@@ -1,5 +1,10 @@
 import sys
 import os
+
+os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+from ament_index_python.packages import get_package_share_directory
 import yaml
 
 from PyQt5.QtWidgets import (
@@ -8,12 +13,10 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 
-from pyqt_monitor.ViewerController import ViewerController
+from .ViewerController import ViewerController
+common_path = get_package_share_directory('common_video')
+config_path = os.path.join(common_path, 'config', 'robot_config.yaml')
 
-_root = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
-_config_path     = os.path.join(_root, "videoReceiv", "config.yaml")
 
 class RobotItem(QWidget):
     def __init__(self, robot_id):
@@ -107,9 +110,11 @@ class ControlUI(QWidget):
         # 3. ROBOT STATE
         # ---------------------------
         # config.yaml 에서 로봇 목록 로드
-        with open(_config_path) as f:
+        with open(config_path) as f:
             cfg = yaml.safe_load(f)
-        self.robots = cfg["robots"]  # [{id, ip, domain_id}, ...]
+        self.robots = cfg["robots"] 
+        print(f"config.yaml 에서 로봇 목록 로드={self.robots}")
+         # [{id, ip, domain_id}, ...]
         # ViewerController 생성
         self.viewer_ctrl = ViewerController(self)
 

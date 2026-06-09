@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from typing import Optional
 
-from ai_controller.aicore.gestureRecognizer import GestureDebugInfo, GESTURE_COLOR
+from ai_controller.aicore.gestureRecognizer import GestureDebugInfo
 from ai_controller.aicore.targetTracker     import TrackDebugInfo
 
 STATE_COLOR = {
