@@ -3,8 +3,8 @@ import cv2
 import numpy as np
 from typing import Optional
 
-from aicore.gestureRecognizer import GestureDebugInfo
-from aicore.targetTracker     import TrackDebugInfo
+from ai_controller.aicore.gestureRecognizer import GestureDebugInfo
+from ai_controller.aicore.targetTracker     import TrackDebugInfo
 
 STATE_COLOR = {
     "STOP":   (0, 200, 255),

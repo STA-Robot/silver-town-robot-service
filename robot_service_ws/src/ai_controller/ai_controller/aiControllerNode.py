@@ -18,11 +18,11 @@ from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 
-from stateContoller import StateController, State, Event
-from aicore.gestureRecognizer import get_gesture, GestureDebugInfo
-from aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
-from robot_comm import send_command, set_target
-from visualizer import draw as draw_visualizer
+from .stateController import StateController, State, Event
+from ai_controller.aicore.gestureRecognizer import get_gesture, GestureDebugInfo
+from ai_controller.aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
+from .robot_comm import send_command, set_target
+from .visualizer import draw as draw_visualizer
 
 
 class AIControllerNode(Node):

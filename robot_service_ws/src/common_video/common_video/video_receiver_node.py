@@ -50,7 +50,7 @@ class VideoReceiverNode(Node):
 
         # ── ROS2 퍼블리셔 (ip별) ──────────────────────────────
         # 토픽명: /192_168_1_10/image_raw  (점→언더스코어)
-        self.publishers: dict[str, object] = {
+        self.image_pubs: dict[str, object] = {
             ip: self.create_publisher(
                 CompressedImage,
                 f'/robot_{ip.replace(".", "_")}/image/compressed',
@@ -146,7 +146,7 @@ class VideoReceiverNode(Node):
                 if robot_ip not in self._active_robots():
                     continue
  
-                pub = self.publishers[robot_ip]
+                pub = self.image_pubs[robot_ip]
                 if pub.get_subscription_count() == 0:
                     continue
  

@@ -1,13 +1,21 @@
 <?xml version='1.0' ?>
-
 <launch>
     <arg name="server_ip" default="0.0.0.0"/>
     <arg name="video_port" default="9999"/>
 
-    <node pkg="common_video" exec="videoNode">
-        <param from="$(find-pkg-share common_video)/config/video_config.yaml"/>
+    <!-- VideoReceiver — param from 제거 -->
+    <node pkg="common_video" exec="video_receiver_node" output="screen">
         <param name="server_ip" value="$(var server_ip)"/>
         <param name="video_port" value="$(var video_port)"/>
+    </node>
+
+    <!-- AIController -->
+    <node pkg="ai_controller" exec="aiControllerNode" output="screen"/>
+
+    <!-- PyQt Monitor — Qt 환경변수 추가 -->
+    <node pkg="pyqt_monitor" exec="pyqt_monitor" output="screen">
+        <env name="QT_QPA_PLATFORM_PLUGIN_PATH" value=""/>
+        <env name="QT_QPA_PLATFORM" value="xcb"/>
     </node>
 
 </launch>

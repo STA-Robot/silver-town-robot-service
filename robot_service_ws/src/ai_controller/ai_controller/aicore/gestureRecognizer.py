@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 from collections import deque, Counter
 from ultralytics import YOLO
-from ..stateContoller import Event
+from ..stateController import Event
 import os
 from ament_index_python.packages import get_package_share_directory
 

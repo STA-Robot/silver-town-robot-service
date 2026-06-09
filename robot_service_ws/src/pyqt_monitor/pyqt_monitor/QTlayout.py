@@ -1,9 +1,6 @@
-import sys
 import os
-
 os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
 os.environ["QT_QPA_PLATFORM"] = "xcb"
-
 from ament_index_python.packages import get_package_share_directory
 import yaml
 
@@ -15,7 +12,7 @@ from PyQt5.QtCore import Qt
 
 from .ViewerController import ViewerController
 common_path = get_package_share_directory('common_video')
-config_path = os.path.join(common_path, 'config', 'robot_config.yaml')
+config_path = os.path.join(common_path, 'config', 'video_config.yaml')
 
 
 class RobotItem(QWidget):
@@ -133,7 +130,7 @@ class ControlUI(QWidget):
 
         # 예시 로봇 4개 등록
         for robot in self.robots:
-            item = RobotItem(robot["id"])
+            item = RobotItem(robot["robot_name"])
             item.view_btn.clicked.connect(lambda _, ip=robot["robot_ip"]: self.viewer_ctrl.on_view(ip))
             self.robot_list_container.addWidget(item)
         
