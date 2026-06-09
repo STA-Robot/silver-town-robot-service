@@ -66,16 +66,23 @@ class FollowerNode(Node):
             self._on_Start_With_IP()
             self.running = True
 
+        elif msg.data == "stop":          # ← 추가
+            self.get_logger().info("FOLLOW STOP")
+            self._on_Stop()
+
 
     # START IP Pub 
     def _on_Start_With_IP(self):
         self.get_logger().info("Start_With_IP")
-        data={"ip":self.robot_ip,
-              "port":self.robot_port}
+        data={
+              "ip":self.robot_ip,
+              "port":self.robot_port,
+              "active": True 
+              }
         msg = String()
         msg.data = json.dumps(data)
         self.target_pub.publish(msg)
-        self.get_logger().info("Start_With_IP"+{data})
+        self.get_logger().info(f"Start_With_IP {data}") 
 
     # UDP 메시지 콜백 
     def _on_udp_message(self, msg):
@@ -128,6 +135,14 @@ class FollowerNode(Node):
         self._is_ended = True
 
         self.pub.publish(Twist())
+        data = {
+            "ip":     self.robot_ip,
+            "port":   self.robot_port,
+            "active": False
+        }
+        stop_msg = String()
+        stop_msg.data = json.dumps(data)
+        self.target_pub.publish(stop_msg)
 
         msg = String()
         msg.data = "done"

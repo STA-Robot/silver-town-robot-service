@@ -134,7 +134,7 @@ class ControlUI(QWidget):
         # 예시 로봇 4개 등록
         for robot in self.robots:
             item = RobotItem(robot["id"])
-            item.view_btn.clicked.connect(lambda _, ip=robot["ip"]: self.viewer_ctrl.on_view(ip))
+            item.view_btn.clicked.connect(lambda _, ip=robot["robot_ip"]: self.viewer_ctrl.on_view(ip))
             self.robot_list_container.addWidget(item)
         
         # 스크롤 영역 내부가 남을 때 아이템들을 위로 밀착시키기 위한 Stretch

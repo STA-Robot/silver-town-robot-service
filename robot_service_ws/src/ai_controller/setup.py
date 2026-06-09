@@ -26,7 +26,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'AIController = ai_controller.AIController:main',
+            'aiControllerNode = ai_controller.aiControllerNode:main',
         ],
     },
 )
