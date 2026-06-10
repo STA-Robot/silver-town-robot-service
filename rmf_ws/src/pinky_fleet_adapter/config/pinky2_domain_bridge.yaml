@@ -1,9 +1,9 @@
-# RMF domain 31 <-> pinky2 local domain 33
+# RMF domain 30 <-> pinky2 local domain 32
 # RMF /pinky2/command -> pinky2 /command
 # pinky2 /state -> RMF /pinky2/state
 name: pinky2_domain_bridge
-from_domain: 31
-to_domain: 33
+from_domain: 30
+to_domain: 32
 
 topics:
   pinky2/command:
