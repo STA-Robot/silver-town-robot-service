@@ -11,10 +11,11 @@ from pinky_follower.msgHandler import StateHandler
 class FollowerNode(Node):
     def __init__(self):
         super().__init__('follower_node')
-
+        self.declare_parameter('robot_name', "pinky2")
         self.declare_parameter('robot_ip', "192.168.4.1")
         self.declare_parameter('robot_port', 9998)
-
+ 
+        self.robot_name = self.get_parameter('robot_name').value
         self.robot_ip = self.get_parameter('robot_ip').value
         self.robot_port = int(self.get_parameter('robot_port').value)
        
@@ -66,17 +67,18 @@ class FollowerNode(Node):
             self._on_Start_With_IP()
             self.running = True
 
-        elif msg.data == "stop":          # ← 추가
-            self.get_logger().info("FOLLOW STOP")
-            self._on_Stop()
+        # elif msg.data == "stop":          # ← 추가
+        #     self.get_logger().info("FOLLOW STOP")
+        #     self._on_Stop()
 
 
     # START IP Pub 
     def _on_Start_With_IP(self):
         self.get_logger().info("Start_With_IP")
         data={
-              "ip":self.robot_ip,
-              "port":self.robot_port,
+              "robot_name":self.robot_name,
+              "robot_ip":self.robot_ip,
+              "robot_port":self.robot_port,
               "active": True 
               }
         msg = String()
@@ -135,11 +137,12 @@ class FollowerNode(Node):
         self._is_ended = True
 
         self.pub.publish(Twist())
-        data = {
-            "ip":     self.robot_ip,
-            "port":   self.robot_port,
-            "active": False
-        }
+        data={
+              "robot_name":self.robot_name,
+              "robot_ip":self.robot_ip,
+              "robot_port":self.robot_port,
+              "active": False 
+              }
         stop_msg = String()
         stop_msg.data = json.dumps(data)
         self.target_pub.publish(stop_msg)

@@ -17,16 +17,24 @@ def main():
     window.show()
 
     # ViewerController 안의 ROS 노드만 spin
-    spin_thread = threading.Thread(
+    spin_thread_Viewer = threading.Thread(
         target=rclpy.spin,
         args=(window.viewer_ctrl.get_ros_node(),),
         daemon=True
     )
-    spin_thread.start()
+    spin_thread_Viewer.start()
+
+    pin_thread_state = threading.Thread(
+        target=rclpy.spin,
+        args=(window.state_sub.get_ros_node(),),
+        daemon=True
+    )
+    pin_thread_state.start()
 
     exit_code = app.exec_()
 
     window.viewer_ctrl.ros.destroy_node()
+    window.state_sub.destroy()
     rclpy.shutdown()
     sys.exit(exit_code)
 

@@ -6,18 +6,18 @@ server:
 
 robots:
 
-  - robot_name: "robot_1"
+  - robot_name: "pinky1"
     robot_ip: "192.168.4.1"   
     robot_port: "9998"   
 
-  - robot_name: "robot_2"
+  - robot_name: "pinky2"
     robot_ip: "192.168.4.3"    
     robot_port: "9997"  
 
-  - robot_name: "robot_3"
+  - robot_name: "jetcobot1"
     robot_ip: "192.168.4.4"   
     robot_port: "9996"    
 
-  - robot_name: "robot_4"
+  - robot_name: "jetcobot2"
     robot_ip: "192.168.4.5"    
     robot_port: "9995"    

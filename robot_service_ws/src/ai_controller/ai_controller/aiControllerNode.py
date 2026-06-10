@@ -33,7 +33,7 @@ class AIControllerNode(Node):
         self.lock = threading.Lock()
 
         # ── 상태 ───────────────────────────────────────────────
-        self._current_ip:   Optional[str]         = None
+        self._current_name:   Optional[str]         = None
         self._image_sub:    Optional[object]      = None
         self.prev_msg:      Optional[str]         = None
         self.fsm = StateController()
@@ -50,41 +50,37 @@ class AIControllerNode(Node):
 
         self.get_logger().info("[AIControllerNode] 시작")
 
-    # ── 외부 조회 ─────────────────────────────────────────────
-
-    def get_active_robot_ip(self) -> Optional[str]:
-        with self.lock:
-            return self._current_ip
 
     # ── TaskManager 콜백 ───────────────────────────────────────
 
     def _on_ai_target(self, msg: String):
         try:
             data     = json.loads(msg.data)
-            robot_ip = data["ip"]
-            port     = int(data["port"])
-            active   = data.get("active", True)
+            robot_name = data["robot_name"]
+            robot_ip = data["robot_ip"]
+            port     = int(data["robot_port"])
+            active   = data.get("active")
 
             if active:
-                self._start_inference(robot_ip, port)
+                self._start_inference(robot_name,robot_ip, port)
             else:
                 self._stop_inference()
         except Exception as e:
             self.get_logger().error(f"[ai_target 파싱 오류] {e}")
 
-    def _start_inference(self, robot_ip: str, port: int):
+    def _start_inference(self, robot_name: str,robot_ip: str, port: int):
         with self.lock:
-            if self._current_ip == robot_ip:
+            if self._current_name == robot_name:
                 return
-            self.get_logger().info(f"[AI] 추론 대상: {self._current_ip} → {robot_ip}")
+            self.get_logger().info(f"[AI] 추론 대상: {self._current_name} → {robot_name}")
             self._destroy_image_sub()
-            self._current_ip = robot_ip
+            self._current_name = robot_name
             self.prev_msg    = None
             global_tracker.reset()
             self.fsm.reset()
             set_target(robot_ip, port)
 
-        topic = f'/robot_{robot_ip.replace(".", "_")}/image/compressed'
+        topic = f'/{robot_name}/image/compressed'
         self._image_sub = self.create_subscription(
             CompressedImage, topic, self._on_frame, 10
         )
@@ -92,10 +88,9 @@ class AIControllerNode(Node):
 
     def _stop_inference(self):
         with self.lock:
-            self.get_logger().info(f"[AI] 추론 중단: {self._current_ip}")
+            self.get_logger().info(f"[AI] 추론 중단: {self._current_name}")
             self._destroy_image_sub()
-            self._current_ip   = None
-            self._latest_debug = None
+            self._current_name   = None
             self.prev_msg      = None
             global_tracker.reset()
             self.fsm.reset()
@@ -117,7 +112,7 @@ class AIControllerNode(Node):
             return
 
         with self.lock:
-            if self._current_ip is None:
+            if self._current_name is None:
                 return
 
         # ── AI 로직 ────────────────────────────────────────────

@@ -1,5 +1,5 @@
-robot:
-  robot_name: "robot_1"
-  robot_ip: "192.168.4.1"    # 실제 로봇 IP로 교체
-  robot_port: 9998    # 실제 로봇 IP로 교체
-  robot_domain_id: 32
+follower_node:
+  ros__parameters:
+    robot_name: "pinky2"
+    robot_ip: "192.168.4.1"
+    robot_port: 9998
