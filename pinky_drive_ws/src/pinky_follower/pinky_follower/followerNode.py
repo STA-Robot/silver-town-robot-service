@@ -13,10 +13,10 @@ class FollowerNode(Node):
         super().__init__('follower_node')
 
         self.declare_parameter('robot_ip', "192.168.4.1")
-        self.declare_parameter('robot_port', "9998")
+        self.declare_parameter('robot_port', 9998)
 
         self.robot_ip = self.get_parameter('robot_ip').value
-        self.robot_port = self.get_parameter('robot_port').value
+        self.robot_port = int(self.get_parameter('robot_port').value)
        
         self.target_pub = self.create_publisher(String, '/ai_target', 10)
         self.pub       = self.create_publisher(Twist,  '/cmd_vel',      10)

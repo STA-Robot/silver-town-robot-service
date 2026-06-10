@@ -48,9 +48,9 @@ class ViewerRosNode(Node):
 
 
 class ViewerController(QObject):
-    """PyQt UI 전담 — Node 아님"""
-
+    #PyQt UI 전담 
     frame_ready = pyqtSignal(object)
+    clear_viewer         = pyqtSignal()# 빈 화면으로 초기화
 
     def __init__(self, ui):
         QObject.__init__(self)
@@ -69,6 +69,7 @@ class ViewerController(QObject):
         )
 
         self.frame_ready.connect(self._show_frame)
+        self.clear_viewer.connect(self._show_empty)
 
     def get_ros_node(self):
         return self.ros
@@ -104,6 +105,8 @@ class ViewerController(QObject):
         title_widget = self.ui.viewer_layout.itemAt(0).widget()
         if title_widget:
             title_widget.setText(f"  VIEWER — ({robot_ip})")
+
+        self.clear_viewer.emit()
 
         self._resubscribe(robot_ip)
 
@@ -146,3 +149,8 @@ class ViewerController(QObject):
             Qt.SmoothTransformation,
         )
         self.ui.viewer.setPixmap(pixmap)
+
+    def _show_empty(self):
+        """뷰어를 검은 화면으로 초기화 (잔상 제거)"""
+        self.ui.viewer.clear()
+        self.ui.viewer.setText("CAMERA VIEW")

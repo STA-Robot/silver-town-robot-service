@@ -20,7 +20,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 
 pkg_path = get_package_share_directory('ai_controller')
-model_path = os.path.join(pkg_path, 'models', 'gesture_best.pt')
+model_path = os.path.join(pkg_path, 'models', 'doll_best.pt')
 
 person_model = YOLO(model_path)
 

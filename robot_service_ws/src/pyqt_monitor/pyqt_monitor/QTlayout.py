@@ -164,7 +164,8 @@ class ControlUI(QWidget):
         self.viewer = QLabel("CAMERA VIEW")
         self.viewer.setStyleSheet("background-color: #2b2b2b; color: white;")
         self.viewer.setAlignment(Qt.AlignCenter)
-        self.viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.viewer.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.viewer.setMinimumSize(1, 1)
 
         self.viewer_layout.addWidget(viewer_title)
         self.viewer_layout.addWidget(self.viewer)
