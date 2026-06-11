@@ -11,7 +11,7 @@ from launch_ros.actions import Node
 def generate_launch_description():
     maps_share = get_package_share_directory("rmf_maps")
     default_building_map = os.path.join(
-        maps_share, "maps", "rmf-test.building.yaml"
+        maps_share, "maps", "silver_town_map.building.yaml"
     )
 
     return LaunchDescription(

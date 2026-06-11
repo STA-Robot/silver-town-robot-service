@@ -19,9 +19,9 @@ rmf_ws/
   src/
     rmf_maps/
       maps/
-        rmf-test.building.yaml       # traffic-editor/building map 원본
+        silver_town_map.building.yaml # traffic-editor/building map 원본
       nav_graphs/
-        0.yaml                       # RMF fleet adapter가 사용하는 nav graph
+        1.yaml                       # RMF fleet adapter가 사용하는 nav graph
 
     pinky_fleet_adapter/
       config/
@@ -80,12 +80,12 @@ PoC 때 루트에 있던 파일은 아래처럼 옮겼다.
 
 | 기존 파일 | 새 위치 |
 |---|---|
-| `rmf-test.building.yaml` | `src/rmf_maps/maps/rmf-test.building.yaml` |
-| `0.yaml` | `src/rmf_maps/nav_graphs/0.yaml` |
+| `silver_town_map.building.yaml` | `src/rmf_maps/maps/silver_town_map.building.yaml` |
+| `1.yaml` | `src/rmf_maps/nav_graphs/1.yaml` |
 | `pinky_adapter.yaml` | `src/pinky_fleet_adapter/config/pinky_adapter.yaml` |
 
-`rmf-test.building.yaml` 안의 drawing image는 `../maps/test_map.png`를 참조한다.
-실제 Ubuntu 실행 환경에서는 해당 이미지도 `src/rmf_maps/maps/test_map.png`에
+`silver_town_map.building.yaml` 안의 drawing image는 `../maps/map_final.png`를 참조한다.
+실제 Ubuntu 실행 환경에서는 해당 이미지도 `src/rmf_maps/maps/map_final.png`에
 두면 된다.
 
 ## 빌드
@@ -245,7 +245,7 @@ fleet adapter만 실행하려면 아래 launch를 사용한다. 이 경우 RMF s
 ```bash
 ros2 launch pinky_fleet_adapter pinky_fleet_adapter.launch.py \
   config_file:=$(ros2 pkg prefix pinky_fleet_adapter)/share/pinky_fleet_adapter/config/pinky_adapter.yaml \
-  nav_graph_file:=$(ros2 pkg prefix rmf_maps)/share/rmf_maps/nav_graphs/0.yaml
+  nav_graph_file:=$(ros2 pkg prefix rmf_maps)/share/rmf_maps/nav_graphs/1.yaml
 ```
 
 통합 bringup launch는 RMF core를 먼저 띄운 뒤 fleet adapter, workcell adapter,
@@ -295,27 +295,27 @@ task orchestrator는 단일 테이블 호출 입력으로 `/table_call` service�
 
 ```bash
 ros2 service call /table_call task_msgs/srv/TableCall \
-  "{table_id: 'tent_1', table_waypoint: 'tent_1', wait_seconds: 20}"
+  "{table_id: 'table_1', table_waypoint: 'table_1', wait_seconds: 20}"
 ```
 
 기본 waypoint/default wait 설정을 쓰는 호출:
 
 ```bash
 ros2 service call /table_call task_msgs/srv/TableCall \
-  "{table_id: 'tent_1', table_waypoint: '', wait_seconds: 0}"
+  "{table_id: 'table_1', table_waypoint: '', wait_seconds: 0}"
 ```
 
 table collection task를 one-shot으로 직접 제출하려면 task orchestrator executable을 사용할 수 있다.
 
 ```bash
-ros2 run task_orchestrator task_orchestrator --table-waypoint tent_1
+ros2 run task_orchestrator task_orchestrator --table-waypoint table_1
 ```
 
 one-shot 실행에서 debug 로그를 보려면 ROS log level을 넘긴다.
 
 ```bash
 ros2 run task_orchestrator task_orchestrator \
-  --table-waypoint tent_1 \
+  --table-waypoint table_1 \
   --ros-args --log-level task_orchestrator:=debug
 ```
 

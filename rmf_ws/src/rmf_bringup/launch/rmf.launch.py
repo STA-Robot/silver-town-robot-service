@@ -32,9 +32,9 @@ def generate_launch_description():
     default_workcell_adapter_config = os.path.join(
         workcell_adapter_share, "config", "workcell_adapter.yaml"
     )
-    default_nav_graph = os.path.join(maps_share, "nav_graphs", "0.yaml")
+    default_nav_graph = os.path.join(maps_share, "nav_graphs", "1.yaml")
     default_building_map = os.path.join(
-        maps_share, "maps", "rmf-test.building.yaml"
+        maps_share, "maps", "silver_town_map.building.yaml"
     )
     default_orchestrator_config = os.path.join(
         orchestrator_share, "config", "task_orchestrator.yaml"

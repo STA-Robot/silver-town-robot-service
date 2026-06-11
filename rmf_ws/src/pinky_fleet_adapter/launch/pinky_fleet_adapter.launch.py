@@ -41,7 +41,7 @@ def generate_launch_description():
     maps_share = get_package_share_directory("rmf_maps")
 
     default_config = os.path.join(adapter_share, "config", "pinky_adapter.yaml")
-    default_nav_graph = os.path.join(maps_share, "nav_graphs", "0.yaml")
+    default_nav_graph = os.path.join(maps_share, "nav_graphs", "1.yaml")
 
     return LaunchDescription(
         [
