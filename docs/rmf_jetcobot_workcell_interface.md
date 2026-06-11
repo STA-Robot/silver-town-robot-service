@@ -38,7 +38,7 @@ JetCobot pick & place logic
 
 | 컴포넌트 | 책임 |
 |---|---|
-| `task_orchestrator` | mission 상태 관리, 창고 도착 후 pick/place task 제출, 완료/실패에 따른 mission 분기 |
+| `task_orchestrator` | mission 상태 관리, `wait_at_warehouse` 시작 후 pick/place request 제출, 완료/실패에 따른 hold 해제와 mission 분기 |
 | Open-RMF | 지정된 workcell request 전달, workcell result 기반 task 상태 갱신. JetCobot 선정은 하지 않는다. |
 | `workcell_adapter` | RMF ingestor request 수신, `target_guid` 기반 JetCobot 라우팅, arm command 발행, arm state 감시, RMF result 보고 |
 | `jetcobot_arm_manager` | JetCobot 하드웨어 제어, pick & place 로직 실행, command/state idempotency 처리 |
@@ -395,26 +395,31 @@ jetcobot1 publishes `/jetcobot1/state`
 
 ## task_orchestrator 연동 메모
 
-`task_orchestrator`는 창고 이동 task가 완료된 뒤 workcell pick/place task/request를 Open-RMF에 제출한다.
+`task_orchestrator`는 창고 이동 후 시작되는 `wait_at_warehouse` hold action을
+warehouse 도착 신호로 사용한다. 이 hold action이 시작되면 workcell pick/place
+request를 제출하고, workcell 최종 결과가 오기 전까지 Pinky는 warehouse task 안에서
+대기한다.
 
 ```text
 table_task_completed
   -> check_bin_state
   -> submit_warehouse_task_to_same_robot
-  -> warehouse_task_completed
-  -> submit_pick_place_workcell_task
+  -> warehouse_hold_started(wait_at_warehouse)
+  -> submit_pick_place_workcell_request
   -> wait_until_workcell_completed
+  -> release_warehouse_hold
   -> mission_completed
 ```
 
 중요 규칙:
 
-- `warehouse_task_completed` 전에는 pick/place task를 제출하지 않는다.
+- `wait_at_warehouse` 시작 전에는 pick/place request를 제출하지 않는다.
 - pick/place task에는 대상 창고 workcell/로봇팔이 드러나는 `target_guid`를 포함한다. Open-RMF가 JetCobot을 선정하지 않는다.
 - pick/place 성공 전에는 Pinky 보관함을 empty로 갱신하지 않는다.
 - pick/place 실패 시 mission은 `intervention_required`로 남긴다.
 - pick/place 진행 중인 Pinky는 신규 table call 후보가 되면 안 된다.
-- pick/place 완료 후 Pinky 복귀는 별도 direct return task가 아니라 RMF `finishing_request: park`에 맡긴다.
+- pick/place 완료 후 orchestrator는 warehouse hold task를 `kill_task_request`로 해제한다.
+- Pinky 복귀는 별도 direct return task가 아니라 RMF `finishing_request: park`에 맡긴다.
 
 ## 구현 메모
 

@@ -125,12 +125,31 @@ Fleet-level dispatch 예시:
     "category": "compose",
     "description": {
       "category": "warehouse_move",
-      "detail": "Move assigned robot to warehouse",
+      "detail": "Move assigned robot to warehouse and hold for workcell",
       "phases": [
         {
           "activity": {
-            "category": "go_to_place",
-            "description": "warehouse"
+            "category": "sequence",
+            "description": {
+              "activities": [
+                {
+                  "category": "go_to_place",
+                  "description": "warehouse"
+                },
+                {
+                  "category": "perform_action",
+                  "description": {
+                    "category": "wait_at_warehouse",
+                    "description": {
+                      "mission_id": "mission_001",
+                      "table": "warehouse",
+                      "seconds": 10
+                    },
+                    "unix_millis_action_duration_estimate": 10000
+                  }
+                }
+              ]
+            }
           }
         }
       ]
@@ -141,6 +160,11 @@ Fleet-level dispatch 예시:
   }
 }
 ```
+
+`wait_at_warehouse`는 workcell pick/place가 끝날 때까지 Pinky를 창고에 대기시키는
+hold action이다. orchestrator는 이 action의 `/task_events` started 이벤트를
+workcell request 제출 트리거로 사용하고, workcell 최종 결과 후 warehouse task에
+`kill_task_request`를 보내 hold를 해제한다.
 
 ### Service 방식
 

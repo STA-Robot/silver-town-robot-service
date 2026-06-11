@@ -222,8 +222,11 @@ RMF domain의 `/pinkyX/command` publisher와 `/pinkyX/state` subscriber를 사�
 Pinky drive manager와 통신한다. `jetcobot_workcell_adapter`는 RMF domain의
 `/jetcobot1/command` publisher와 `/jetcobot1/state` subscriber를 사용해
 JetCobot arm manager와 통신한다. `task_orchestrator`는 별도 패키지이며
-RMF task API service에 table collection/warehouse task를 제출하고, 창고 도착 후
-`/ingestor_requests`로 pick-and-place workcell request를 제출한다.
+RMF Task API topic에 table collection/warehouse task를 제출한다. warehouse task는
+`go_to_place(warehouse)` 뒤 `perform_action(wait_at_warehouse)`로 Pinky를 창고에
+대기시키고, 이 hold action이 시작되면 `/ingestor_requests`로 pick-and-place
+workcell request를 제출한다. workcell 결과가 오면 hold task를 해제하고 mission을
+완료 또는 수동개입 상태로 전환한다.
 
 RMF core만 실행하려면 아래 launch를 사용한다.
 
@@ -288,7 +291,7 @@ ros2 launch rmf_bringup rmf.launch.py \
 ### Table Call Service
 
 task orchestrator는 단일 테이블 호출 입력으로 `/table_call` service를 제공한다.
-요청을 받으면 table collection RMF task를 `/submit_task`로 제출하고,
+요청을 받으면 table collection RMF task를 `task_api_requests`로 제출하고,
 응답으로 orchestrator가 만든 `mission_id`를 반환한다. `table_waypoint`를 비우면
 `table_id`와 같은 waypoint로 처리한다. `wait_seconds`가 `0`이면 orchestrator 기본
 대기 시간을 사용한다.
@@ -319,6 +322,40 @@ ros2 run task_orchestrator task_orchestrator \
   --ros-args --log-level task_orchestrator:=debug
 ```
 
+### Warehouse / Workcell Flow
+
+보관함이 full이면 orchestrator는 table task를 수행한 같은 로봇에게 warehouse
+`robot_task_request`를 보낸다. warehouse task는 아래 sequence로 만들어진다.
+
+```text
+go_to_place(warehouse)
+perform_action(wait_at_warehouse)
+```
+
+`wait_at_warehouse`는 Pinky가 workcell 작업 위치에서 떠나지 않도록 잡아두는 hold
+action이다. fleet adapter는 이 action이 시작될 때 `/task_events`에
+`event=started`, `activity_type=action`, `action_category=wait_at_warehouse`를
+publish한다. orchestrator는 이 이벤트를 warehouse 도착 신호로 보고
+`/ingestor_requests`에 pick-and-place request를 보낸다.
+
+workcell adapter는 `/ingestor_results`로 `ACKNOWLEDGED`, `SUCCESS`, `FAILED`를
+publish한다. `ACKNOWLEDGED`는 대기 상태를 유지하고, `SUCCESS`는 mission 완료,
+`FAILED`는 `intervention_required`로 전환한다. `SUCCESS` 또는 `FAILED` 같은 최종
+결과를 받으면 orchestrator는 warehouse hold RMF task에 `kill_task_request`를 보내
+hold를 해제한다. 이후 복귀는 `pinky_adapter.yaml`의 `finishing_request: park`에
+맡긴다.
+
+관련 설정은 `task_orchestrator/config/task_orchestrator.yaml`에 있다.
+
+```yaml
+task_event_topic: /task_events
+warehouse_waypoint: warehouse
+warehouse_hold_seconds: 10
+workcell_request_topic: /ingestor_requests
+workcell_result_topic: /ingestor_results
+workcell_target_guid: warehouse_pick_place_jetcobot1
+```
+
 ### Follow Service
 
 task orchestrator는 특정 Pinky에게 사람 추종을 시작시키는 `/follow_call` service를
@@ -343,7 +380,7 @@ ros2 topic echo /pinky1/state
 
 follow를 중단하려면 `/cancel_follow_call` service를 호출한다. orchestrator는
 `/follow_call`로 제출한 follow task의 RMF `task_id`를 로봇별로 추적하고,
-cancel 요청 시 RMF Task API에 `cancel_task_request`를 보낸다.
+cancel 요청 시 RMF Task API에 `kill_task_request`를 보낸다.
 
 ```bash
 ros2 service call /cancel_follow_call task_msgs/srv/CancelFollow \
