@@ -1,8 +1,10 @@
 fleet_name: pinky
 task_api_request_topic: task_api_requests
 task_api_response_topic: task_api_responses
+task_event_topic: /task_events
 default_wait_seconds: 20
 warehouse_waypoint: warehouse
+warehouse_hold_seconds: 10
 return_map: L1
 return_pose: [0.15874, 0.43924, 0.0]
 storage_full_default: true

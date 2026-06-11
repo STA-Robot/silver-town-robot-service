@@ -30,6 +30,7 @@ rmf_fleet:
     delivery: false
   finishing_request: park
   responsive_wait: true
+  task_event_topic: /task_events
   # Nav2/map-frame yaw in radians to use when the destination is a parking spot.
   parking_yaws:
     pinky1_parking_spot: -1.5708

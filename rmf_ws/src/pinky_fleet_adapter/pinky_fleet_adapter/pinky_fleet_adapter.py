@@ -19,12 +19,14 @@ import time
 import threading
 import asyncio
 import math
+import json
 import nudged
 
 import rclpy
 import rclpy.node
 from rclpy.parameter import Parameter
 from rclpy.duration import Duration
+from std_msgs.msg import String
 
 import rmf_adapter
 from rmf_adapter import Adapter
@@ -125,13 +127,26 @@ def main(argv=sys.argv):
     # Initialize robot API for this fleet
     fleet_mgr_yaml = config_yaml['fleet_manager']
     api = RobotAPI(fleet_mgr_yaml, node)
+    task_event_topic = config_yaml['rmf_fleet'].get(
+        'task_event_topic',
+        '/task_events',
+    )
+    task_event_pub = node.create_publisher(String, task_event_topic, 10)
+    node.get_logger().info(f'Publishing task events on [{task_event_topic}]')
 
     parking_yaws = config_yaml['rmf_fleet'].get('parking_yaws', {})
     robots = {}
     for robot_name in fleet_config.known_robots:
         robot_config = fleet_config.get_known_robot_configuration(robot_name)
         robots[robot_name] = RobotAdapter(
-            robot_name, robot_config, node, api, fleet_handle, parking_yaws
+            robot_name,
+            robot_config,
+            node,
+            api,
+            fleet_handle,
+            fleet_name,
+            parking_yaws,
+            task_event_pub,
         )
 
     update_period = 1.0/config_yaml['rmf_fleet'].get(
@@ -180,9 +195,12 @@ class RobotAdapter:
         node,
         api: RobotAPI,
         fleet_handle,
-        parking_yaws: dict | None = None
+        fleet_name: str,
+        parking_yaws: dict | None = None,
+        task_event_pub=None,
     ):
         self.name = name
+        self.fleet_name = fleet_name
         self.execution = None
         self.update_handle = None
         self.configuration = configuration
@@ -191,14 +209,18 @@ class RobotAdapter:
         self.fleet_handle = fleet_handle
         self.action_timers = {}
         self.parking_yaws = parking_yaws or {}
+        self.task_event_pub = task_event_pub
+        self.execution_context = None
 
     def update(self, state):
         activity_identifier = None
         execution = self.execution
         if execution:
             if self.api.is_command_completed(self.name):
+                self._publish_task_event("completed", self.execution_context)
                 execution.finished()
                 self.execution = None
+                self.execution_context = None
             else:
                 activity_identifier = execution.identifier
 
@@ -244,9 +266,16 @@ class RobotAdapter:
         self.execution = execution
         pose = list(destination.position)
         destination_name = self._destination_name(destination)
+        self.execution_context = {
+            "activity_type": "navigation",
+            "destination_name": destination_name,
+            "destination_map": str(destination.map),
+            "destination_pose": pose,
+        }
         parking_yaw = self.parking_yaws.get(destination_name)
         if parking_yaw is not None:
             pose[2] = self._normalize_yaw(float(parking_yaw))
+            self.execution_context["destination_pose"] = pose
             self.node.get_logger().info(
                 f'Applying parking yaw [{pose[2]:.3f}] for '
                 f'[{self.name}] at [{destination_name}]'
@@ -274,12 +303,20 @@ class RobotAdapter:
 
     def execute_action(self, category: str, description: dict, execution):
         self.execution = execution
-        if category == "wait_at_table":
+        context = self._action_context(category, description)
+        self.execution_context = context
+        if category in {"wait_at_table", "wait_at_warehouse"}:
             seconds = self._wait_seconds_from_description(description)
+            place = "warehouse" if category == "wait_at_warehouse" else "table"
             self.node.get_logger().info(
-                f'Commanding [{self.name}] to wait at table for {seconds:.1f}s'
+                f'Commanding [{self.name}] to wait at {place} for {seconds:.1f}s'
             )
-            self._finish_action_after_delay(execution, max(seconds, 0.001))
+            self._publish_task_event("started", context)
+            self._finish_action_after_delay(
+                execution,
+                max(seconds, 0.001),
+                context,
+            )
             return
 
         if category == "follow":
@@ -310,9 +347,45 @@ class RobotAdapter:
             return float(value or 0.0)
         except (TypeError, ValueError):
             self.node.get_logger().warn(
-                f'Invalid wait_at_table seconds for [{self.name}]: {value}'
+                f'Invalid wait action seconds for [{self.name}]: {value}'
             )
             return 0.0
+
+    def _action_context(self, category: str, description) -> dict:
+        action_description = description
+        if isinstance(description, dict) and isinstance(
+            description.get("description"),
+            dict,
+        ):
+            action_description = description["description"]
+
+        context = {
+            "activity_type": "action",
+            "action_category": str(category),
+        }
+        if isinstance(action_description, dict):
+            for key in ("mission_id", "table", "seconds"):
+                if key in action_description:
+                    context[key] = action_description[key]
+        return context
+
+    def _publish_task_event(self, event: str, context: dict | None = None) -> None:
+        if self.task_event_pub is None:
+            return
+
+        payload = {
+            "event": event,
+            "fleet_name": self.fleet_name,
+            "robot_name": self.name,
+            "stamp": self.node.get_clock().now().nanoseconds,
+        }
+        if context:
+            payload.update(context)
+
+        msg = String()
+        msg.data = json.dumps(payload, sort_keys=True)
+        self.task_event_pub.publish(msg)
+        self.node.get_logger().info(f'published task event {msg.data}')
 
     def _destination_name(self, destination) -> str:
         name = getattr(destination, "name", "")
@@ -332,7 +405,12 @@ class RobotAdapter:
         timer.cancel()
         self.node.destroy_timer(timer)
 
-    def _finish_action_after_delay(self, execution, seconds: float):
+    def _finish_action_after_delay(
+        self,
+        execution,
+        seconds: float,
+        context: dict | None = None,
+    ):
         timer_key = id(execution)
         timer_ref = {}
 
@@ -341,9 +419,11 @@ class RobotAdapter:
             self.node.destroy_timer(timer_ref["timer"])
             if self.action_timers.pop(timer_key, None) is None:
                 return
+            self._publish_task_event("completed", context)
             execution.finished()
             if self.execution is execution:
                 self.execution = None
+                self.execution_context = None
 
         timer = self.node.create_timer(seconds, finish_action)
         timer_ref["timer"] = timer
@@ -359,9 +439,11 @@ def _register_performable_actions(fleet_handle, node):
     consider_all = rmf_adapter.consider_all()
     more.consider_composed_requests(consider_all)
     more.add_performable_action("wait_at_table", consider_all)
+    more.add_performable_action("wait_at_warehouse", consider_all)
     more.add_performable_action("follow", consider_all)
     node.get_logger().info(
-        'Registered performable actions [wait_at_table, follow] for compose tasks'
+        'Registered performable actions '
+        '[wait_at_table, wait_at_warehouse, follow] for compose tasks'
     )
 
 

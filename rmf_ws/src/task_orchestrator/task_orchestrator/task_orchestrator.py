@@ -17,6 +17,7 @@ from rmf_ingestor_msgs.msg import (
 )
 from rmf_task_msgs.msg import ApiRequest, ApiResponse, DispatchStates, TaskSummary
 from pinky_drive_msgs.msg import DriveCommand
+from std_msgs.msg import String
 from task_msgs.srv import CancelFollow, FollowCall, TableCall
 import yaml
 
@@ -30,6 +31,8 @@ DEFAULT_WORKCELL_RESULT_TOPIC = "/ingestor_results"
 DEFAULT_WORKCELL_TARGET_GUID = "warehouse_pick_place_jetcobot1"
 DEFAULT_WORKCELL_TRANSPORTER_TYPE = "pinky"
 DEFAULT_WORKCELL_ITEM_TYPE_GUIDS = ["towel", "medicine_box", "cup"]
+DEFAULT_TASK_EVENT_TOPIC = "/task_events"
+DEFAULT_WAREHOUSE_HOLD_SECONDS = 3600
 PICK_PLACE_SUFFIX = "-pick-place"
 TASK_STATE_NAMES = {
     TaskSummary.STATE_QUEUED: "queued",
@@ -113,17 +116,45 @@ def build_warehouse_move_task(
     mission_id: str,
     warehouse_waypoint: str,
     fleet_name: str = DEFAULT_FLEET_NAME,
+    hold_seconds: int = DEFAULT_WAREHOUSE_HOLD_SECONDS,
 ) -> dict:
+    activities = [
+        {
+            "category": "go_to_place",
+            "description": warehouse_waypoint,
+        }
+    ]
+    if hold_seconds > 0:
+        activities.append(
+            {
+                "category": "perform_action",
+                "description": {
+                    "category": "wait_at_warehouse",
+                    "description": {
+                        "mission_id": mission_id,
+                        "table": warehouse_waypoint,
+                        "seconds": hold_seconds,
+                    },
+                    "unix_millis_action_duration_estimate": hold_seconds * 1000,
+                },
+            }
+        )
+
     return {
         "category": "compose",
         "description": {
             "category": "warehouse_move",
-            "detail": f"Move assigned robot to {warehouse_waypoint}",
+            "detail": (
+                f"Move assigned robot to {warehouse_waypoint} "
+                "and hold for workcell"
+            ),
             "phases": [
                 {
                     "activity": {
-                        "category": "go_to_place",
-                        "description": warehouse_waypoint,
+                        "category": "sequence",
+                        "description": {
+                            "activities": activities,
+                        },
                     }
                 }
             ],
@@ -210,11 +241,13 @@ class TaskOrchestrator(Node):
         return_map: str = "L1",
         return_pose: list[float] | None = None,
         storage_full_default: bool = True,
+        warehouse_hold_seconds: int = DEFAULT_WAREHOUSE_HOLD_SECONDS,
         workcell_request_topic: str = DEFAULT_WORKCELL_REQUEST_TOPIC,
         workcell_result_topic: str = DEFAULT_WORKCELL_RESULT_TOPIC,
         workcell_target_guid: str = DEFAULT_WORKCELL_TARGET_GUID,
         workcell_transporter_type: str = DEFAULT_WORKCELL_TRANSPORTER_TYPE,
         workcell_item_type_guids: list[str] | None = None,
+        task_event_topic: str = DEFAULT_TASK_EVENT_TOPIC,
     ):
         super().__init__("task_orchestrator")
         self.fleet_name = fleet_name
@@ -225,6 +258,7 @@ class TaskOrchestrator(Node):
         self.return_map = return_map
         self.return_pose = return_pose or [0.15874, 0.43924, 0.0]
         self.storage_full_default = bool(storage_full_default)
+        self.warehouse_hold_seconds = int(warehouse_hold_seconds)
         self.workcell_request_topic = workcell_request_topic
         self.workcell_result_topic = workcell_result_topic
         self.workcell_target_guid = workcell_target_guid
@@ -232,6 +266,7 @@ class TaskOrchestrator(Node):
         self.workcell_item_type_guids = (
             workcell_item_type_guids or DEFAULT_WORKCELL_ITEM_TYPE_GUIDS
         )
+        self.task_event_topic = task_event_topic
         self.missions_by_id = {}
         self.missions_by_task_id = {}
         self.missions_by_workcell_request_id = {}
@@ -269,6 +304,12 @@ class TaskOrchestrator(Node):
             IngestorResult,
             workcell_result_topic,
             self._on_ingestor_result,
+            10,
+        )
+        self.task_event_sub = self.create_subscription(
+            String,
+            task_event_topic,
+            self._on_task_event,
             10,
         )
         self.table_call_srv = self.create_service(
@@ -309,8 +350,10 @@ class TaskOrchestrator(Node):
             f"task_api_topics={task_api_request_topic},{task_api_response_topic} "
             f"wait_seconds={self.default_wait_seconds} "
             f"warehouse={self.warehouse_waypoint} "
+            f"warehouse_hold_seconds={self.warehouse_hold_seconds} "
             f"storage_full_default={self.storage_full_default} "
             f"workcell={self.workcell_target_guid} "
+            f"task_event_topic={self.task_event_topic} "
             f"return={self.return_map}:{self.return_pose} "
             f"services=/table_call,/follow_call,/cancel_follow_call"
         )
@@ -531,6 +574,7 @@ class TaskOrchestrator(Node):
             mission_id=mission.mission_id,
             warehouse_waypoint=self.warehouse_waypoint,
             fleet_name=self.fleet_name,
+            hold_seconds=self.warehouse_hold_seconds,
         )
         self._stamp_task_request(task_request)
         future = self._call_task_api_async(
@@ -864,6 +908,7 @@ class TaskOrchestrator(Node):
         success: bool,
         message: str,
     ) -> None:
+        self.release_warehouse_hold(mission, message)
         if success:
             self._log_mission_transition(mission, "mission_completed")
             return
@@ -873,6 +918,53 @@ class TaskOrchestrator(Node):
             f"workcell failed mission={mission.mission_id}: {message}"
         )
         # TODO: Add intervention workflow for workcell failures.
+
+    def release_warehouse_hold(self, mission: Mission, reason: str = "") -> None:
+        task_id = mission.current_rmf_task_id
+        if not task_id:
+            return
+
+        future = self._call_task_api_async(
+            {
+                "type": "kill_task_request",
+                "task_id": task_id,
+                "labels": [
+                    mission.mission_id,
+                    "warehouse_move",
+                    "release_workcell_hold",
+                ],
+            }
+        )
+        future.add_done_callback(
+            lambda completed: self._on_release_warehouse_hold_response(
+                mission.mission_id,
+                task_id,
+                completed,
+            )
+        )
+        self.get_logger().info(
+            f"published release warehouse hold mission={mission.mission_id} "
+            f"task_id={task_id} reason={reason}"
+        )
+
+    def _on_release_warehouse_hold_response(
+        self,
+        mission_id: str,
+        task_id: str,
+        future,
+    ) -> None:
+        response = self._future_json_result(future)
+        if response.get("success", False):
+            self.get_logger().info(
+                f"released warehouse hold mission={mission_id} "
+                f"task_id={task_id} response={response}"
+            )
+            return
+
+        self.get_logger().warning(
+            f"failed to release warehouse hold mission={mission_id} "
+            f"task_id={task_id} response={response}"
+        )
 
     def _on_ingestor_result(self, msg: IngestorResult) -> None:
         mission = self.missions_by_workcell_request_id.get(msg.request_guid)
@@ -914,6 +1006,118 @@ class TaskOrchestrator(Node):
                 f"source_guid={msg.source_guid}"
             ),
         )
+
+    def _on_task_event(self, msg: String) -> None:
+        try:
+            event = json.loads(msg.data)
+        except Exception as exc:
+            self.get_logger().warning(f"ignore malformed task event: {exc}")
+            return
+
+        if not isinstance(event, dict):
+            self.get_logger().warning(f"ignore non-object task event: {msg.data}")
+            return
+
+        fleet_name = str(event.get("fleet_name") or "")
+        if fleet_name and fleet_name != self.fleet_name:
+            return
+
+        event_name = str(event.get("event") or "")
+        activity_type = str(event.get("activity_type") or "")
+        if event_name == "started" and activity_type == "action":
+            self._on_action_started_event(event)
+        elif event_name == "completed" and activity_type == "action":
+            self._on_action_completed_event(event)
+        elif event_name == "completed" and activity_type == "navigation":
+            self._on_navigation_completed_event(event)
+
+    def _on_action_started_event(self, event: dict) -> None:
+        action_category = str(event.get("action_category") or "")
+        mission_id = str(event.get("mission_id") or "")
+        table = str(event.get("table") or "")
+        if (
+            action_category != "wait_at_warehouse"
+            or table != self.warehouse_waypoint
+            or not mission_id
+        ):
+            return
+
+        mission = self.missions_by_id.get(mission_id)
+        if mission is None:
+            self.get_logger().debug(
+                f"ignore warehouse hold start for unknown mission={mission_id}"
+            )
+            return
+
+        if mission.state != "warehouse_task_submitted":
+            self.get_logger().debug(
+                f"ignore warehouse hold start mission={mission_id} "
+                f"state={mission.state}"
+            )
+            return
+
+        robot_name = str(event.get("robot_name") or "")
+        if robot_name and mission.assigned_robot != robot_name:
+            mission.assigned_robot = robot_name
+
+        self.get_logger().info(
+            f"received warehouse hold start mission={mission.mission_id} "
+            f"robot={mission.assigned_robot}"
+        )
+        self.on_warehouse_task_completed(mission)
+
+    def _on_action_completed_event(self, event: dict) -> None:
+        action_category = str(event.get("action_category") or "")
+        mission_id = str(event.get("mission_id") or "")
+        if action_category != "wait_at_table" or not mission_id:
+            return
+
+        mission = self.missions_by_id.get(mission_id)
+        if mission is None:
+            self.get_logger().debug(
+                f"ignore wait_at_table event for unknown mission={mission_id}"
+            )
+            return
+
+        if mission.state != "table_task_submitted":
+            self.get_logger().debug(
+                f"ignore wait_at_table event mission={mission_id} "
+                f"state={mission.state}"
+            )
+            return
+
+        robot_name = str(event.get("robot_name") or "")
+        if robot_name and mission.assigned_robot != robot_name:
+            mission.assigned_robot = robot_name
+            self.get_logger().info(
+                f"mission={mission.mission_id} assigned_robot={robot_name} "
+                f"from task event"
+            )
+
+        self.get_logger().info(
+            f"received table completion event mission={mission.mission_id} "
+            f"robot={mission.assigned_robot}"
+        )
+        self.on_table_task_completed(mission)
+
+    def _on_navigation_completed_event(self, event: dict) -> None:
+        destination_name = str(event.get("destination_name") or "")
+        robot_name = str(event.get("robot_name") or "")
+        if destination_name != self.warehouse_waypoint or not robot_name:
+            return
+
+        for mission in self.missions_by_id.values():
+            if mission.state != "warehouse_task_submitted":
+                continue
+            if mission.assigned_robot != robot_name:
+                continue
+
+            self.get_logger().info(
+                f"received warehouse completion event mission={mission.mission_id} "
+                f"robot={robot_name}"
+            )
+            self.on_warehouse_task_completed(mission)
+            return
 
     def _log_mission_transition(
         self,
@@ -1149,12 +1353,27 @@ class TaskOrchestrator(Node):
             )
             if mission.state == "warehouse_task_submitted":
                 self.on_warehouse_task_completed(mission)
-            else:
+            elif mission.state == "table_task_submitted":
                 self.on_table_task_completed(mission)
+            else:
+                self.get_logger().debug(
+                    f"ignore completed task_summary mission={mission.mission_id} "
+                    f"task_id={task_id} state={mission.state}"
+                )
         elif msg.state in (
             TaskSummary.STATE_FAILED,
             TaskSummary.STATE_CANCELED,
         ):
+            if mission.state in (
+                "mission_completed",
+                "intervention_required",
+            ):
+                self.get_logger().debug(
+                    f"ignore terminal mission task_summary mission={mission.mission_id} "
+                    f"task_id={task_id} rmf_state={state_name} state={mission.state}"
+                )
+                return
+
             self._log_mission_transition(mission, "rmf_task_failed")
             self.get_logger().warning(
                 f"mission={mission.mission_id} task={task_id} failed: {msg.status}"
@@ -1237,6 +1456,11 @@ def main(argv=sys.argv):
     parser.add_argument("--table-waypoint", default="")
     parser.add_argument("--wait-seconds", type=int, default=20)
     parser.add_argument("--warehouse-waypoint", default="warehouse")
+    parser.add_argument(
+        "--warehouse-hold-seconds",
+        type=int,
+        default=DEFAULT_WAREHOUSE_HOLD_SECONDS,
+    )
     args = parser.parse_args(args_without_ros[1:])
 
     config = _load_config(args.config_file)
@@ -1261,6 +1485,9 @@ def main(argv=sys.argv):
         return_map=str(config.get("return_map", "L1")),
         return_pose=list(config.get("return_pose", [0.15874, 0.43924, 0.0])),
         storage_full_default=bool(config.get("storage_full_default", True)),
+        warehouse_hold_seconds=int(
+            config.get("warehouse_hold_seconds", args.warehouse_hold_seconds)
+        ),
         workcell_request_topic=str(
             config.get("workcell_request_topic", DEFAULT_WORKCELL_REQUEST_TOPIC)
         ),
@@ -1281,6 +1508,9 @@ def main(argv=sys.argv):
                 "workcell_item_type_guids",
                 DEFAULT_WORKCELL_ITEM_TYPE_GUIDS,
             )
+        ),
+        task_event_topic=str(
+            config.get("task_event_topic", DEFAULT_TASK_EVENT_TOPIC)
         ),
     )
 
