@@ -18,6 +18,7 @@ import yaml
 import time
 import threading
 import asyncio
+import math
 import nudged
 
 import rclpy
@@ -125,11 +126,12 @@ def main(argv=sys.argv):
     fleet_mgr_yaml = config_yaml['fleet_manager']
     api = RobotAPI(fleet_mgr_yaml, node)
 
+    parking_yaws = config_yaml['rmf_fleet'].get('parking_yaws', {})
     robots = {}
     for robot_name in fleet_config.known_robots:
         robot_config = fleet_config.get_known_robot_configuration(robot_name)
         robots[robot_name] = RobotAdapter(
-            robot_name, robot_config, node, api, fleet_handle
+            robot_name, robot_config, node, api, fleet_handle, parking_yaws
         )
 
     update_period = 1.0/config_yaml['rmf_fleet'].get(
@@ -177,7 +179,8 @@ class RobotAdapter:
         configuration,
         node,
         api: RobotAPI,
-        fleet_handle
+        fleet_handle,
+        parking_yaws: dict | None = None
     ):
         self.name = name
         self.execution = None
@@ -187,6 +190,7 @@ class RobotAdapter:
         self.api = api
         self.fleet_handle = fleet_handle
         self.action_timers = {}
+        self.parking_yaws = parking_yaws or {}
 
     def update(self, state):
         activity_identifier = None
@@ -238,14 +242,24 @@ class RobotAdapter:
 
     def navigate(self, destination, execution):
         self.execution = execution
+        pose = list(destination.position)
+        destination_name = self._destination_name(destination)
+        parking_yaw = self.parking_yaws.get(destination_name)
+        if parking_yaw is not None:
+            pose[2] = self._normalize_yaw(float(parking_yaw))
+            self.node.get_logger().info(
+                f'Applying parking yaw [{pose[2]:.3f}] for '
+                f'[{self.name}] at [{destination_name}]'
+            )
+
         self.node.get_logger().info(
-            f'Commanding [{self.name}] to navigate to {destination.position} '
+            f'Commanding [{self.name}] to navigate to {pose} '
             f'on map [{destination.map}]'
         )
 
         self.api.navigate(
             self.name,
-            destination.position,
+            pose,
             destination.map,
             destination.speed_limit
         )
@@ -299,6 +313,16 @@ class RobotAdapter:
                 f'Invalid wait_at_table seconds for [{self.name}]: {value}'
             )
             return 0.0
+
+    def _destination_name(self, destination) -> str:
+        name = getattr(destination, "name", "")
+        if callable(name):
+            name = name()
+        return str(name or "")
+
+    @staticmethod
+    def _normalize_yaw(yaw: float) -> float:
+        return math.atan2(math.sin(yaw), math.cos(yaw))
 
     def _cancel_action_timer(self, execution):
         timer = self.action_timers.pop(id(execution), None)

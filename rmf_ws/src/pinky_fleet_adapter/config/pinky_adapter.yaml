@@ -30,6 +30,10 @@ rmf_fleet:
     delivery: false
   finishing_request: park
   responsive_wait: true
+  # Nav2/map-frame yaw in radians to use when the destination is a parking spot.
+  parking_yaws:
+    pinky1_parking_spot: -1.5708
+    pinky2_parking_spot: -1.5708
   max_merge_waypoint_distance: 0.02
   max_merge_lane_distance: 0.02
   robots:
