@@ -117,7 +117,7 @@ class VideoReceiverNode(Node):
         try:
             data       = json.loads(msg.data)
             robot_name = data["robot_name"]
-            active     = data.get("active")#start일때 True로 end일때 False 보내고 있음
+            active     = data.get("active",True)#start일때 True로 end일때 False 보내고 있음
  
             if robot_name not in self.robots:
                 return

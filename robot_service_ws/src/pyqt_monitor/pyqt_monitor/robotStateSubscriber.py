@@ -1,10 +1,3 @@
-"""
-RobotStateSubscriber.py
-
-각 로봇의 /{ros_name}/state 토픽 구독
-→ robot_state_signal(robot_name, state, battery, available, emergency) 시그널 발행
-→ QTlayout RobotItem 라벨 업데이트
-"""
 
 import os
 import yaml
@@ -19,8 +12,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 
 class RobotStateNode(Node):
-    """ROS2 통신 전담 — /{ros_name}/state 구독"""
-
+    #ROS2 통신 전담 — /{ros_name}/state 구독
     def __init__(self, robot_configs: list, on_state_cb: Callable):
         super().__init__('robot_state_subscriber_node')
 
@@ -50,8 +42,7 @@ class RobotStateNode(Node):
 
 
 class RobotStateSubscriber(QObject):
-    """PyQt 시그널 전담"""
-
+    #PyQt 시그널 전담
     # robot_name, state, battery(0~1), available, emergency
     robot_state_signal = pyqtSignal(str, str, float, bool, bool)
 
@@ -80,7 +71,7 @@ class RobotStateSubscriber(QObject):
         self.robot_state_signal.connect(self.ui._on_robot_state)
 
     def _on_state_cb(self, robot_name, state, battery, available, emergency):
-        """ROS 스레드 → PyQt 메인스레드로 시그널 전달"""
+        #ROS 스레드 → PyQt 메인스레드로 시그널 전달
         self.robot_state_signal.emit(
             robot_name,
             state,

@@ -62,7 +62,7 @@ class RobotItem(QWidget):
 
     def update_state(self, state: str, battery: float,
                      available: bool, emergency: bool):
-        """/{ros_name}/state 수신 시 라벨 업데이트"""
+        #/{ros_name}/state 수신 시 라벨 업데이트
         self.state_label.setText(f"state: {state}")
 
         pct = int(battery * 100)

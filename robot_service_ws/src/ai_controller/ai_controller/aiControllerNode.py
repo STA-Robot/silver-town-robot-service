@@ -1,9 +1,3 @@
-"""
-ai_controller_node.py
-
-/ai_target 토픽 수신 → 해당 로봇 CompressedImage 구독 → YOLO 추론 → /ai/image_result 발행
-발행 타입도 CompressedImage (imencode → bytes 그대로 실음)
-"""
 
 import json
 import threading
@@ -59,7 +53,7 @@ class AIControllerNode(Node):
             robot_name = data["robot_name"]
             robot_ip = data["robot_ip"]
             port     = int(data["robot_port"])
-            active   = data.get("active")
+            active   = data.get("active",True)
 
             if active:
                 self._start_inference(robot_name,robot_ip, port)
