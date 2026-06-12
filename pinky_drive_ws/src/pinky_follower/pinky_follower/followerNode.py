@@ -88,7 +88,7 @@ class FollowerNode(Node):
 
     # UDP 메시지 콜백 
     def _on_udp_message(self, msg):
-        
+        self.get_logger().info(f"Start_on_udp_message") 
         if self._is_ended or not self.running:
             return
         self._has_received = True
@@ -104,6 +104,7 @@ class FollowerNode(Node):
             return
 
         self.pub.publish(twist)
+        self.get_logger().info(f"Start_twist {twist}") 
 
     # timeout 감시 + Recovery 
     def _check_timeout(self):
@@ -119,16 +120,7 @@ class FollowerNode(Node):
             self.pub.publish(Twist())
             return
 
-        # UDP는 살아있지만 FOLLOW 메시지가 끊긴 경우 → Recovery 시도
-        # (STOP/END 상태일 땐 controller.target_id가 None이므로 자동으로 None 반환)
-        result = self.state_handler.controller.compute_recovery()
-        if result is not None:
-            linear, angular = result
-            twist = Twist()
-            twist.linear.x  = linear
-            twist.angular.z = angular
-            self.pub.publish(twist)
-
+      
     # END 처리 
     def _on_end(self):
         self.get_logger().info("FOLLOW DONE")

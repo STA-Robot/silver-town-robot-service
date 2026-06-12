@@ -34,7 +34,7 @@ class UDPReceiver(LoggerMixin):
         self.thread.start()
 
     def _recv_loop(self):
-        self._log_info("UDP 수신 시작")
+        
         while self.running:
             try:
                 data, _ = self.sock.recvfrom(1024)
@@ -44,6 +44,7 @@ class UDPReceiver(LoggerMixin):
                     self.last_recv_time = time.time()
 
                 if self.on_message and msg:
+                    self._log_info(f"msg:{msg}")
                     self.on_message(msg)
 
             except socket.timeout:

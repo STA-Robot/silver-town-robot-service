@@ -31,11 +31,17 @@ class StateHandler(LoggerMixin):
             self.prev_state = "STOP"
 
         elif state == "LOST":
-            twist.linear.x  = 0.0
-            twist.angular.z = 0.0
             self.controller.set_recovery(True)   # Recovery 활성
-            self._log_warn("[STATE] LOST → Recovery 탐색 시작")
+            result = self.controller.compute_recovery()
+            if result is not None:
+                twist.linear.x, twist.angular.z = result
+            else:
+                # 360도 완료 후 → 정지 유지
+                twist.linear.x  = 0.0
+                twist.angular.z = 0.0
+            self._log_warn("[STATE] LOST")
             self.prev_state = "LOST"
+    
 
         elif state == "END":
             twist.linear.x  = 0.0
@@ -64,6 +70,7 @@ class StateHandler(LoggerMixin):
             twist.linear.x  = linear
             twist.angular.z = angular
             self.prev_state = "FOLLOW"
+            self._log_info("[STATE] FOLLOW ")
 
         else:
             self._log_warn(f"[STATE] 알 수 없는 상태: {state}")

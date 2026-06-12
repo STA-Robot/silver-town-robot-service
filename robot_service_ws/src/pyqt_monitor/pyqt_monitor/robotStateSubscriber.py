@@ -21,7 +21,8 @@ class RobotStateNode(Node):
         # 각 로봇별 토픽 구독
         for robot in robot_configs:
             robot_name = robot["robot_name"]
-            topic      = f'/{robot_name}/state'
+            #topic      = f'/{robot_name}/state'
+            topic      = f'/state'
 
             self.create_subscription(
                 DriveState,

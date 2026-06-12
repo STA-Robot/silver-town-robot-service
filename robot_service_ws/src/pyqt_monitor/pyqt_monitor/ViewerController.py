@@ -166,6 +166,6 @@ class ViewerController(QObject):
         self.ui.viewer.setPixmap(pixmap)
 
     def _show_empty(self):
-        """뷰어를 검은 화면으로 초기화 (잔상 제거)"""
+        #뷰어를 검은 화면으로 초기화 (잔상 제거)
         self.ui.viewer.clear()
         self.ui.viewer.setText("CAMERA VIEW")

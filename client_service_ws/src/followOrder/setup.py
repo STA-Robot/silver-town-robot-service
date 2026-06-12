@@ -1,7 +1,6 @@
 from setuptools import find_packages, setup
-import os
-from glob import glob 
-package_name = 'pyqt_monitor'
+
+package_name = 'followOrder'
 
 setup(
     name=package_name,
@@ -11,7 +10,6 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-         (os.path.join('share', package_name, 'map'), glob('map/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,7 +24,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-             'pyqt_monitor = pyqt_monitor.main:main',
         ],
     },
 )

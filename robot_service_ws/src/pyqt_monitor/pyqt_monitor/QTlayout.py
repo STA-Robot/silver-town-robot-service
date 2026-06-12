@@ -17,8 +17,16 @@ from PyQt5.QtCore import Qt
 from .ViewerController import ViewerController
 from .robotStateSubscriber import RobotStateSubscriber
 
+# ── 추가 import ──────────────────────────────────────────────────
+from .mapWidget import MapWidget
+from .robotPoseSubscriber import RobotPoseSubscriber
+# ────────────────────────────────────────────────────────────────
 common_path = get_package_share_directory('common_video')
 config_path = os.path.join(common_path, 'config', 'video_config.yaml')
+
+pkg_path = get_package_share_directory('pyqt_monitor')
+MAP_IMAGE_PATH = os.path.join(pkg_path, 'map', 'silvertown_map_hd.png')
+MAP_YAML_PATH  = os.path.join(pkg_path, 'map', 'silvertown_map.yaml')
 
 
 class RobotItem(QWidget):
@@ -62,13 +70,11 @@ class RobotItem(QWidget):
 
     def update_state(self, state: str, battery: float,
                      available: bool, emergency: bool):
-        #/{ros_name}/state 수신 시 라벨 업데이트
         self.state_label.setText(f"state: {state}")
 
         pct = int(battery * 100)
         self.battery_label.setText(f"battery: {pct}%")
 
-        # 배터리 색상
         if pct <= 20:
             self.battery_label.setStyleSheet("color: red; font-weight: bold;")
         elif pct <= 50:
@@ -76,18 +82,17 @@ class RobotItem(QWidget):
         else:
             self.battery_label.setStyleSheet("color: green;")
 
-        # 행 배경색
         if emergency:
             self.setStyleSheet(
-                "border-bottom: 1px solid gray; background-color: #ffe0e0;"  # 빨강
+                "border-bottom: 1px solid gray; background-color: #ffe0e0;"
             )
         elif not available:
             self.setStyleSheet(
-                "border-bottom: 1px solid gray; background-color: #fff8e0;"  # 노랑
+                "border-bottom: 1px solid gray; background-color: #fff8e0;"
             )
         else:
             self.setStyleSheet(
-                "border-bottom: 1px solid gray; background-color: #ffffff;"  # 흰색
+                "border-bottom: 1px solid gray; background-color: #ffffff;"
             )
 
 
@@ -102,6 +107,12 @@ class ControlUI(QWidget):
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
+        # ── config 로드 (로봇 목록 먼저 필요) ─────────────────
+        with open(config_path) as f:
+            cfg = yaml.safe_load(f)
+        self.robots = cfg["robots"]
+        robot_names = [r["robot_name"] for r in self.robots]
+
         # ── MAP ───────────────────────────────────────────────
         self.map_frame  = QFrame()
         self.map_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: #e8dfcf;")
@@ -112,12 +123,21 @@ class ControlUI(QWidget):
         map_title.setStyleSheet("background: black; color: white; font-weight: bold; font-size: 14px;")
         map_title.setFixedHeight(30)
 
-        self.map_canvas = QLabel("MAP VIEW")
-        self.map_canvas.setAlignment(Qt.AlignCenter)
-        self.map_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # ── QLabel → MapWidget 교체 ───────────────────────────
+        with open(MAP_YAML_PATH) as f:
+            map_yaml = yaml.safe_load(f)
+
+        self.map_widget = MapWidget(
+            map_image_path=MAP_IMAGE_PATH,
+            map_yaml=map_yaml,
+            robot_names=robot_names,
+            hd_scale=6,   
+            parent=self
+        )
+        # ─────────────────────────────────────────────────────
 
         self.map_layout.addWidget(map_title)
-        self.map_layout.addWidget(self.map_canvas)
+        self.map_layout.addWidget(self.map_widget)   # ← MapWidget
         self.map_frame.setLayout(self.map_layout)
 
         # ── EVENT LOG ─────────────────────────────────────────
@@ -143,13 +163,14 @@ class ControlUI(QWidget):
         self.event_frame.setLayout(self.event_layout)
 
         # ── ROBOT STATE ───────────────────────────────────────
-        with open(config_path) as f:
-            cfg = yaml.safe_load(f)
-        self.robots = cfg["robots"]
-
         # ViewerController, RobotStateSubscriber 생성
         self.viewer_ctrl  = ViewerController(self)
         self.state_sub    = RobotStateSubscriber(self)
+
+        # ── RobotPoseSubscriber 생성 ──────────────────────────
+        # self.pose_sub = RobotPoseSubscriber(robot_names, self)
+        # self.pose_sub.pose_received.connect(self._on_robot_pose)
+        # ─────────────────────────────────────────────────────
 
         self.robot_frame  = QFrame()
         self.robot_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
@@ -164,7 +185,6 @@ class ControlUI(QWidget):
         self.robot_list_container.setContentsMargins(0, 0, 0, 0)
         self.robot_list_container.setSpacing(0)
 
-        # config 기준 버튼 생성 (기본 비활성화)
         self.robot_items: dict[str, RobotItem] = {}
         self.robot_ips:   dict[str, str]       = {}
 
@@ -222,7 +242,7 @@ class ControlUI(QWidget):
         self.setLayout(main_layout)
         self.setStyleSheet("background-color: #f0f0f0;")
 
-    # ── 로봇 상태 수신 (VideoReceiver → 온/오프라인) ──────────
+    # ── 로봇 온/오프라인 (VideoReceiver → 온/오프라인) ─────────
 
     def _on_robot_status(self, robot_name: str, robot_ip: str, online: bool):
         item = self.robot_items.get(robot_name)
@@ -243,21 +263,25 @@ class ControlUI(QWidget):
         else:
             item.set_online(False)
             self.robot_ips.pop(robot_name, None)
+            # 오프라인 시 맵에서 로봇 마커 제거
+            self.map_widget.clear_pose(robot_name)
             self.add_event_log(f"{robot_name} 오프라인", self._now())
 
-    # ── 로봇 state 수신 (RobotStateSubscriber → 라벨 업데이트) ─
+    # ── 로봇 state 수신 ────────────────────────────────────────
 
     def _on_robot_state(self, robot_name: str, state: str,
                         battery: float, available: bool, emergency: bool):
         item = self.robot_items.get(robot_name)
         if item is None:
             return
-
         item.update_state(state, battery, available, emergency)
 
-        # 비상정지 이벤트 로그
-        # if emergency:
-        #     self.add_event_log(f"{robot_name} 비상정지!", self._now())
+    # ── 로봇 pose 수신 → MapWidget 업데이트 ──────────────────
+    #   RobotPoseSubscriber.pose_received 시그널 수신
+
+    def _on_robot_pose(self, robot_name: str,
+                       world_x: float, world_y: float, yaw: float):
+        self.map_widget.update_pose(robot_name, world_x, world_y, yaw)
 
     # ── 이벤트 로그 ───────────────────────────────────────────
 

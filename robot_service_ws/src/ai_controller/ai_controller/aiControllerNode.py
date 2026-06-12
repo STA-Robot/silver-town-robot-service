@@ -119,6 +119,9 @@ class AIControllerNode(Node):
 
         t_dbg = TrackDebugInfo()
         cmd   = None
+        # # ── 제스처로 상태가 바뀐 경우 우선 처리 ──────────────
+        # if changed and self.fsm.state in (State.STOP, State.END):
+        #     cmd = self.fsm.state  # STOP or END 즉시 반영
 
         if self.fsm.state in (State.FOLLOW, State.LOST):
             msg_str, t_dbg = get_person_target(frame)
@@ -139,7 +142,8 @@ class AIControllerNode(Node):
 
         if cmd is not None:
             is_follow = isinstance(cmd, str) and cmd.startswith("FOLLOW")
-            if is_follow or cmd != self.prev_msg:
+            is_lost   = cmd == "LOST" 
+            if is_follow or is_lost or cmd != self.prev_msg:
                 send_command(cmd)
                 self.prev_msg = cmd
 

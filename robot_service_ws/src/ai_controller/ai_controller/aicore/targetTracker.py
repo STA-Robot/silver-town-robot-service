@@ -91,6 +91,7 @@ class TargetTracker:
         self.lost_frames    = 0
         self.total_lost_frames = 0
         self.id_history     = defaultdict(float)
+        self.is_searching   = False
 
     def reset(self):
         #ID + 특징 모두 초기화 
@@ -100,6 +101,7 @@ class TargetTracker:
         self.lost_frames    = 0
         self.total_lost_frames = 0
         self.id_history     = defaultdict(float)
+        self.is_searching   = False
         print("[타겟 리셋] 완전 초기화")
 
     def soft_reset(self):
@@ -107,6 +109,7 @@ class TargetTracker:
         self.target_id   = None
         self.lost_frames = 0
         self.id_history  = defaultdict(float)
+        self.is_searching = True
         print("[타겟 소프트 리셋] ID 초기화, 특징 유지")
 
     def register(self, track_id, color_hist, reid_feat):
@@ -165,6 +168,7 @@ def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
                         tracker.target_id         = track_id
                         tracker.lost_frames       = 0
                         tracker.total_lost_frames = 0
+                        tracker.is_searching      = False  # ← 재탐색 성공
                         print(f"[재탐색 성공] ID={track_id} (유사도={sim:.2f})")
                     else:
                         continue  # 다른 인형 — 무시
@@ -203,6 +207,10 @@ def get_person_target(frame) -> tuple[str, TrackDebugInfo]:
 
         if tracker.lost_frames >= LOST_MAX_FRAMES:   # 9초 → LOST
             tracker.soft_reset()
+            debug.is_lost = True
+            return "LOST", debug
+        
+        if tracker.is_searching:
             debug.is_lost = True
             return "LOST", debug
 

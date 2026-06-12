@@ -1,0 +1,5 @@
+table_call_client:
+  ros__parameters:
+    table_id: "tent_1"
+    waypoint: "tent_1"
+    wait_seconds: 20
