@@ -119,3 +119,6 @@ Thumbs.db
 *.rpm
 *.tar.gz
 *.zip
+
+# mp4 파일 제외
+*.mp4

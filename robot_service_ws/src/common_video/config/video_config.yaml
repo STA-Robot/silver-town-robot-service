@@ -1,0 +1,20 @@
+
+server:
+  server_ip: "0.0.0.0"          # AI 서버 수신 IP (0.0.0.0 = 모든 인터페이스)
+  video_port: 9999       # 영상 수신 포트 (로봇 4대 공통)
+  
+
+robots:
+
+  - robot_name: "pinky1"
+    robot_ip: "192.168.4.3"   
+    robot_port: "9997"   
+
+  - robot_name: "pinky2"
+    robot_ip: "192.168.4.1"    
+    robot_port: "9998"  
+
+  - robot_name: "jetcobot1"
+    robot_ip: "192.168.4.4"   
+    robot_port: "9996"    
+

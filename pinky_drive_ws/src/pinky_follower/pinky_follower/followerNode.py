@@ -1,4 +1,5 @@
 import rclpy
+import json
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from std_msgs.msg import String
@@ -10,10 +11,18 @@ from pinky_follower.msgHandler import StateHandler
 class FollowerNode(Node):
     def __init__(self):
         super().__init__('follower_node')
-
+        self.declare_parameter('robot_name', "pinky2")
+        self.declare_parameter('robot_ip', "192.168.4.1")
+        self.declare_parameter('robot_port', 9998)
+ 
+        self.robot_name = self.get_parameter('robot_name').value
+        self.robot_ip = self.get_parameter('robot_ip').value
+        self.robot_port = int(self.get_parameter('robot_port').value)
+       
+        self.target_pub = self.create_publisher(String, '/ai_target', 10)
         self.pub       = self.create_publisher(Twist,  '/cmd_vel',      10)
         self.event_pub = self.create_publisher(String, '/follow_event', 10)
-
+        
         # State flags
         self.running = False
         self._is_ended    = False
@@ -23,7 +32,7 @@ class FollowerNode(Node):
 
         # 이벤트 드리븐: 메시지 도착 즉시 _on_udp_message() 호출
         self.udp = UDPReceiver(
-            port=9998,
+            port=self.robot_port,
             logger=self.get_logger(),
             on_message=self._on_udp_message
         )
@@ -55,17 +64,31 @@ class FollowerNode(Node):
             if self.timeout_timer.is_canceled():
                 self.timeout_timer.reset()
 
+            self._on_Start_With_IP()
             self.running = True
 
-        # elif msg.data == "stop":# rmf에서 상태가 변경된 최종 받아야하나?
+        # elif msg.data == "stop":          # ← 추가
         #     self.get_logger().info("FOLLOW STOP")
-        #     self.running = False
-        #     self.pub.publish(Twist())
+        #     self._on_Stop()
 
+
+    # START IP Pub 
+    def _on_Start_With_IP(self):
+        self.get_logger().info("Start_With_IP")
+        data={
+              "robot_name":self.robot_name,
+              "robot_ip":self.robot_ip,
+              "robot_port":self.robot_port,
+              "active": True 
+              }
+        msg = String()
+        msg.data = json.dumps(data)
+        self.target_pub.publish(msg)
+        self.get_logger().info(f"Start_With_IP {data}") 
 
     # UDP 메시지 콜백 
     def _on_udp_message(self, msg):
-        
+        self.get_logger().info(f"Start_on_udp_message") 
         if self._is_ended or not self.running:
             return
         self._has_received = True
@@ -81,6 +104,7 @@ class FollowerNode(Node):
             return
 
         self.pub.publish(twist)
+        self.get_logger().info(f"Start_twist {twist}") 
 
     # timeout 감시 + Recovery 
     def _check_timeout(self):
@@ -96,16 +120,7 @@ class FollowerNode(Node):
             self.pub.publish(Twist())
             return
 
-        # UDP는 살아있지만 FOLLOW 메시지가 끊긴 경우 → Recovery 시도
-        # (STOP/END 상태일 땐 controller.target_id가 None이므로 자동으로 None 반환)
-        result = self.state_handler.controller.compute_recovery()
-        if result is not None:
-            linear, angular = result
-            twist = Twist()
-            twist.linear.x  = linear
-            twist.angular.z = angular
-            self.pub.publish(twist)
-
+      
     # END 처리 
     def _on_end(self):
         self.get_logger().info("FOLLOW DONE")
@@ -114,6 +129,15 @@ class FollowerNode(Node):
         self._is_ended = True
 
         self.pub.publish(Twist())
+        data={
+              "robot_name":self.robot_name,
+              "robot_ip":self.robot_ip,
+              "robot_port":self.robot_port,
+              "active": False 
+              }
+        stop_msg = String()
+        stop_msg.data = json.dumps(data)
+        self.target_pub.publish(stop_msg)
 
         msg = String()
         msg.data = "done"

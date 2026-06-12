@@ -1,7 +1,6 @@
 from setuptools import find_packages, setup
 import os, glob
-
-package_name = 'pinky_follower'
+package_name = 'common_video'
 
 setup(
     name=package_name,
@@ -16,8 +15,8 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='pinky',
-    maintainer_email='pinky@todo.todo',
+    maintainer='ane',
+    maintainer_email='omosoi4082@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
     extras_require={
@@ -27,7 +26,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'followerNode = pinky_follower.followerNode:main',
+             'video_receiver_node = common_video.video_receiver_node:main',
         ],
     },
 )
