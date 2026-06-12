@@ -54,7 +54,7 @@ class RobotStateSubscriber(QObject):
 
         # config 로드
         config_path = os.path.join(
-            get_package_share_directory('common_video'),
+            get_package_share_directory('visionDataHub'),
             'config', 'video_config.yaml'
         )
         with open(config_path) as f:

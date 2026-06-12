@@ -21,7 +21,7 @@ from .robotStateSubscriber import RobotStateSubscriber
 from .mapWidget import MapWidget
 from .robotPoseSubscriber import RobotPoseSubscriber
 # ────────────────────────────────────────────────────────────────
-common_path = get_package_share_directory('common_video')
+common_path = get_package_share_directory('visionDataHub')
 config_path = os.path.join(common_path, 'config', 'video_config.yaml')
 
 pkg_path = get_package_share_directory('pyqt_monitor')

@@ -13,10 +13,10 @@ from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import String
 
 from .stateController import StateController, State, Event
-from ai_controller.aicore.gestureRecognizer import get_gesture, GestureDebugInfo
-from ai_controller.aicore.targetTracker import get_person_target, TrackDebugInfo, tracker as global_tracker
-from .robot_comm import send_command, set_target
-from .visualizer import draw as draw_visualizer
+from ai_controller.aicore.gestureRecognizer import get_gesture
+from ai_controller.aicore.targetTracker import get_person_target, tracker as global_tracker
+from .dbg_data import _publish_inference
+
 
 
 class AIControllerNode(Node):
@@ -150,25 +150,8 @@ class AIControllerNode(Node):
         # ── 추론 결과 발행 (GUI 구독 중일 때만) ───────────────
         if self.result_pub.get_subscription_count() == 0:
             return
-
-        # visualizer로 바운딩박스·상태·방향 오버레이
-        annotated = draw_visualizer(
-            frame.copy(),       # 원본 frame 보존
-            self.fsm.state,
-            g_dbg,
-            t_dbg
-        )
-
-        # annotated numpy → JPEG bytes → CompressedImage
-        ok, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        if not ok:
-            return
-
-        result_msg             = CompressedImage()
-        result_msg.header.stamp = self.get_clock().now().to_msg()
-        result_msg.format      = "jpeg"
-        result_msg.data        = buf.tobytes()
-        self.result_pub.publish(result_msg)
+        buf = _publish_inference(self._current_name,t_dbg,g_dbg)
+        self.result_pub.publish(buf)
 
 
 def main(args=None):

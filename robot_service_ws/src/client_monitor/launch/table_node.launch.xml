@@ -2,7 +2,7 @@
 
 <launch>
 
-    <node pkg="tableOrder" exec="main" name="table_ui" output="screen">
+    <node pkg="client_monitor" exec="main" name="table_ui" output="screen">
         <param from="config/table_config.yaml"/>
     </node>
 

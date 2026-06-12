@@ -4,7 +4,7 @@
     <arg name="video_port" default="9999"/>
 
     <!-- VideoReceiver — param from 제거 -->
-    <node pkg="common_video" exec="video_receiver_node" output="screen">
+    <node pkg="visionDataHub" exec="video_receiver_node" output="screen">
         <param name="server_ip" value="$(var server_ip)"/>
         <param name="video_port" value="$(var video_port)"/>
     </node>

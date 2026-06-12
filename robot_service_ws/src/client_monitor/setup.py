@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'tableOrder'
+package_name = 'client_monitor'
 
 setup(
     name=package_name,

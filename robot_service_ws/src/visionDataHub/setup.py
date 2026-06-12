@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 import os, glob
-package_name = 'common_video'
+package_name = 'visionDataHub'
 
 setup(
     name=package_name,
@@ -26,7 +26,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-             'video_receiver_node = common_video.video_receiver_node:main',
+             'video_receiver_node = visionDataHub.video_receiver_node:main',
+             'followerNode = visionDataHub.followerNode:main',
         ],
     },
 )
