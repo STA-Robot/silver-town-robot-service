@@ -1,6 +1,6 @@
 # jetcobot_ws
 
-JetCobot ROS 2 워크스페이스입니다. MoveIt으로 arm trajectory를 계획하고, `jetcobot_driver`가 실제 JetCobot / MyCobot280 하드웨어에 arm 및 gripper 명령을 전달합니다.
+JetCobot ROS 2 워크스페이스입니다. `jetcobot_manager`가 RMF/workcell 명령을 받고, 별도 `pick_place_action_server`의 `jetcobot_workcell_msgs/action/PickPlace` action으로 pick-and-place를 요청합니다.
 
 ## 패키지 구성
 
@@ -9,31 +9,22 @@ JetCobot ROS 2 워크스페이스입니다. MoveIt으로 arm trajectory를 계�
 | `jetcobot_description` | URDF, RViz display 설정 |
 | `jetcobot_moveit_config` | MoveIt 설정, `/move_action`, RViz launch |
 | `jetcobot_driver` | 실제 하드웨어용 `/arm_controller/follow_joint_trajectory`, `/gripper_controller/follow_joint_trajectory` action server |
-| `jetcobot_manager` | `/command`를 받아 pick-and-place sequence 실행, `/state` publish |
+| `jetcobot_manager` | `/command`를 받아 `/pick_place` action goal 전송, `/state` publish |
 | `jetcobot_workcell_msgs` | workcell command/state 메시지 |
 
 ## 실행 구조
 
-Arm target은 manager가 MoveIt `MoveGroup` action으로 보내고, MoveIt이 planning 후 arm controller action으로 실행합니다.
+RMF/workcell 명령은 manager가 상태를 관리하면서 `PickPlace` action server에 goal 하나로 전달합니다.
 
 ```text
 /command
   -> jetcobot_manager
-  -> /move_action
-  -> MoveIt move_group
-  -> /arm_controller/follow_joint_trajectory
-  -> jetcobot_driver
-  -> JetCobot arm
+  -> /pick_place
+  -> pick_place_action_server
+  -> JetCobot pick-and-place flow
 ```
 
-Gripper target은 MoveIt planning을 거치지 않고 gripper controller action으로 바로 보냅니다.
-
-```text
-jetcobot_manager
-  -> /gripper_controller/follow_joint_trajectory
-  -> jetcobot_driver
-  -> JetCobot gripper
-```
+`/state`는 action server가 아니라 manager가 publish하므로 RMF 쪽 상태 추적 지점은 계속 manager 하나입니다.
 
 ## 빌드
 
@@ -111,10 +102,10 @@ ros2 launch jetcobot_driver pi_bringup.launch.py \
 | `gripper_speed` | `80` | Gripper command speed |
 | `wait_for_motion` | `true` | 목표 도달 대기 여부 |
 | `use_arm_manager` | `false` | `jetcobot_manager` 함께 실행 여부 |
-| `arm_manager_config_file` | installed `arm_manager.yaml` | Pick-and-place sequence 설정 |
+| `arm_manager_config_file` | installed `arm_manager.yaml` | PickPlace action/state mapping 설정 |
 | `command_topic` | `/command` | Workcell command 입력 |
 | `state_topic` | `/state` | Workcell state 출력 |
-| `move_group_action` | `/move_action` | MoveIt action 이름 |
+| `pick_place_action` | `/pick_place` | PickPlace action 이름 |
 
 RMF와 함께 사용할 때도 JetCobot local domain의 launch 인자는 기본값을 유지한다.
 즉, `command_topic:=/command`, `state_topic:=/state`로 두고 RMF workspace의
@@ -193,22 +184,20 @@ ros2 action send_goal /gripper_controller/follow_joint_trajectory \
 
 ## 설정 파일
 
-Pick-and-place sequence는 `src/jetcobot_manager/config/arm_manager.yaml`에서 수정합니다.
+PickPlace action 이름과 feedback state mapping은 `src/jetcobot_manager/config/arm_manager.yaml`에서 수정합니다.
 
 ```yaml
-pick_and_place_sequence:
-  - target: ready
-    state: homing
-    message: moving to ready pose
-  - target: gripper_open
-    state: picking
-    message: opening gripper
-  - target: gripper_close
-    state: picking
-    message: closing gripper
-  - target: home
-    state: homing
-    message: returning home
+pick_place:
+  action_name: /pick_place
+  server_timeout: 5.0
+  seconds_estimate: 30.0
+  state_map:
+    GO_READY: homing
+    SEARCHING: aligning
+    SERVO: aligning
+    OFFSET_MOVE: picking
+    DESCENDING: picking
+    GRIPPING: picking
+    LIFTING: picking
+    SERVO_FAILED: blocked
 ```
-
-`group: arm` target은 MoveIt `/move_action`으로 실행되고, `group: gripper` target은 `/gripper_controller/follow_joint_trajectory`로 직접 실행됩니다.

@@ -22,7 +22,7 @@ def generate_launch_description():
     arm_manager_config_file = LaunchConfiguration("arm_manager_config_file")
     command_topic = LaunchConfiguration("command_topic")
     state_topic = LaunchConfiguration("state_topic")
-    move_group_action = LaunchConfiguration("move_group_action")
+    pick_place_action = LaunchConfiguration("pick_place_action")
 
     return LaunchDescription(
         [
@@ -50,7 +50,7 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("command_topic", default_value="/command"),
             DeclareLaunchArgument("state_topic", default_value="/state"),
-            DeclareLaunchArgument("move_group_action", default_value="/move_action"),
+            DeclareLaunchArgument("pick_place_action", default_value="/pick_place"),
             Node(
                 package="jetcobot_driver",
                 executable="trajectory_action_server",
@@ -82,7 +82,7 @@ def generate_launch_description():
                         "arm_name": arm_name,
                         "command_topic": command_topic,
                         "state_topic": state_topic,
-                        "move_group_action": move_group_action,
+                        "pick_place_action": pick_place_action,
                         "config_file": arm_manager_config_file,
                     }
                 ],

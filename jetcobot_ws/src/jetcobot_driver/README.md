@@ -5,7 +5,7 @@
 JetCobot 관련 런타임은 두 ROS 2 패키지로 나뉩니다.
 
 - `trajectory_action_server`: `/arm_controller/follow_joint_trajectory`, `/gripper_controller/follow_joint_trajectory` action goal을 받아 실제 로봇에 관절/그리퍼 명령을 보냅니다.
-- `jetcobot_manager`: RMF 또는 상위 workcell 노드가 보내는 `/command`를 받아 pick-and-place 시퀀스를 실행하고, 결과를 `/state`로 publish합니다. Arm target은 `MoveGroup` action(`/move_action`)으로 보내고, gripper target은 `/gripper_controller/follow_joint_trajectory`로 직접 보냅니다.
+- `jetcobot_manager`: RMF 또는 상위 workcell 노드가 보내는 `/command`를 받아 `jetcobot_workcell_msgs/action/PickPlace` action server(`/pick_place`)에 goal을 보내고, 결과를 `/state`로 publish합니다.
 
 ## 빌드
 
@@ -68,7 +68,7 @@ arm manager의 기본 통신 경로:
 
 - command 입력: `/command`
 - state 출력: `/state`
-- MoveIt action client: `/move_action`
+- PickPlace action client: `/pick_place`
 - 설정 파일: `jetcobot_manager/config/arm_manager.yaml`
 
 필요하면 launch 인자로 바꿀 수 있습니다.
@@ -79,7 +79,7 @@ ros2 launch jetcobot_driver pi_bringup.launch.py \
   arm_name:=jetcobot1 \
   command_topic:=/command \
   state_topic:=/state \
-  move_group_action:=/move_action \
+  pick_place_action:=/pick_place \
   arm_manager_config_file:=/path/to/arm_manager.yaml
 ```
 
@@ -103,8 +103,8 @@ string payload_json
 
 | command_type | 동작 |
 | --- | --- |
-| `pick_and_place` | `arm_manager.yaml`의 `pick_and_place_sequence`를 순서대로 실행합니다. Arm step은 MoveIt `MoveGroup` goal로 `/move_action`에 전송하고, gripper step은 `/gripper_controller/follow_joint_trajectory`에 전송합니다. |
-| `stop` | 현재 실행 중인 MoveGroup 또는 gripper trajectory goal이 있으면 cancel 요청을 보내고, arm manager 상태를 `blocked`로 바꿉니다. |
+| `pick_and_place` | `PickPlace` action goal을 `/pick_place`에 전송하고 feedback/result를 manager 상태로 publish합니다. |
+| `stop` | 현재 실행 중인 `PickPlace` goal cancel을 요청하고 arm manager 상태를 `blocked`로 바꿉니다. |
 | `reset` | 현재 goal을 cancel하고 내부 상태를 초기화한 뒤 `idle`로 돌아갑니다. |
 
 `arm_name`이 비어 있으면 모든 arm manager가 받을 수 있고, 값이 있으면 같은 `arm_name`을 가진 manager만 처리합니다.
@@ -151,14 +151,14 @@ string message
 
 | 필드 | 의미 |
 | --- | --- |
-| `state` | 현재 arm 상태입니다. 코드 기본값은 `idle`, `reserved`, `picking`, `placing`, `blocked`이며, YAML sequence에 따라 `homing` 같은 상태 문자열도 publish될 수 있습니다. |
+| `state` | 현재 arm 상태입니다. 기본값은 `idle`, `reserved`, `homing`, `aligning`, `picking`, `blocked`이며, `PickPlace` feedback state mapping에 따라 publish됩니다. |
 | `available` | 새 작업을 받을 수 있으면 `true`입니다. 현재 구현에서는 emergency가 아니고, active command가 없고, state가 `idle`일 때만 `true`입니다. |
 | `command_active` | 현재 실행 중인 command가 있으면 `true`입니다. |
 | `active_command_id` | 현재 실행 중인 command id입니다. 실행 중인 명령이 없으면 빈 문자열입니다. |
 | `last_command_id` | 가장 최근에 처리 또는 상태 갱신된 command id입니다. |
 | `last_command_status` | `last_command_id`에 대한 상태입니다. `accepted`, `succeeded`, `failed`, `rejected`, `canceled` 중 하나가 될 수 있습니다. |
-| `progress` | pick-and-place sequence 진행률입니다. `0.0`에서 `1.0` 사이 값입니다. |
-| `seconds_remaining` | 설정값 `seconds_per_step_estimate`와 남은 step 수로 계산한 예상 남은 시간입니다. |
+| `progress` | `PickPlace` feedback 기준 진행률입니다. `0.0`에서 `1.0` 사이 값입니다. |
+| `seconds_remaining` | 설정값 `pick_place.seconds_estimate`와 현재 progress로 계산한 예상 남은 시간입니다. |
 | `message` | 사람이 읽을 수 있는 현재 상태/오류 설명입니다. |
 
 RMF 쪽에서는 `last_command_status`만 단독으로 보면 안 됩니다. 반드시 command id를 같이 비교해야 합니다.
@@ -216,23 +216,25 @@ message: "command already active: cmd-001"
 
 이미 완료된 command id가 최근 완료 cache에 남아 있으면 역시 재실행하지 않고 현재 state만 publish합니다. cache 크기는 `recent_command_cache_size` 파라미터로 정합니다.
 
-## Pick-and-place 시퀀스 설정
+## PickPlace 설정
 
-`jetcobot_manager/config/arm_manager.yaml`에서 joint target과 실행 순서를 정의합니다.
+`jetcobot_manager/config/arm_manager.yaml`에서 action 이름과 feedback state mapping을 정의합니다.
 
 ```yaml
-pick_and_place_sequence:
-  - target: ready
-    state: homing
-    message: moving to ready pose
-  - target: home
-    state: homing
-    message: returning home
+pick_place:
+  action_name: /pick_place
+  server_timeout: 5.0
+  seconds_estimate: 30.0
+  state_map:
+    GO_READY: homing
+    SEARCHING: aligning
+    SERVO: aligning
+    OFFSET_MOVE: picking
+    DESCENDING: picking
+    GRIPPING: picking
+    LIFTING: picking
+    SERVO_FAILED: blocked
 ```
-
-각 step의 `target`은 `joint_targets`에 정의되어 있어야 합니다. `group: arm` target은 MoveIt `moveit_msgs/action/MoveGroup` goal의 `goal_constraints`로 변환해 `/move_action`에 보냅니다. `group: gripper` target은 `control_msgs/action/FollowJointTrajectory` goal로 변환해 `/gripper_controller/follow_joint_trajectory`에 보냅니다.
-
-현재 기본 YAML은 smoke test용 home/ready 중심 값입니다. 실제 pick/place 위치는 현장 캘리브레이션 후 `pick_approach`, `place_approach`, gripper step 등을 활성화해서 사용해야 합니다.
 
 ## Arm trajectory smoke test
 
