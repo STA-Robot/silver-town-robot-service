@@ -9,8 +9,8 @@ import rclpy.executors
 import yaml
 from action_msgs.msg import GoalStatus
 from ament_index_python.packages import get_package_share_directory
-from jetcobot_workcell_msgs.action import PickPlace
-from jetcobot_workcell_msgs.msg import WorkcellCommand, WorkcellState
+from jetcobot_msgs.action import PickPlace
+from jetcobot_msgs.msg import ArmCommand, ArmState
 from rclpy.action import ActionClient
 from rclpy.node import Node
 
@@ -164,13 +164,13 @@ class JetCobotArmManager(Node):
         )
 
         self._command_sub = self.create_subscription(
-            WorkcellCommand,
+            ArmCommand,
             self.command_topic,
             self._command_callback,
             qos_depth,
         )
         self._state_pub = self.create_publisher(
-            WorkcellState,
+            ArmState,
             self.state_topic,
             qos_depth,
         )
@@ -185,7 +185,7 @@ class JetCobotArmManager(Node):
             f"pick_place_action=[{self.pick_place_action}] config=[{self.config_file}]"
         )
 
-    def _command_callback(self, command: WorkcellCommand) -> None:
+    def _command_callback(self, command: ArmCommand) -> None:
         if command.arm_name and command.arm_name != self.arm_name:
             return
 
@@ -220,7 +220,7 @@ class JetCobotArmManager(Node):
             )
         self._publish_state()
 
-    def _validate_command(self, command: WorkcellCommand) -> tuple[bool, str]:
+    def _validate_command(self, command: ArmCommand) -> tuple[bool, str]:
         if not command.command_id:
             return False, "command_id is required"
         if self.emergency:
@@ -229,11 +229,11 @@ class JetCobotArmManager(Node):
             return False, f"command already active: {self.active_command_id}"
         return True, ""
 
-    def _handle_pick_and_place(self, command: WorkcellCommand) -> None:
+    def _handle_pick_and_place(self, command: ArmCommand) -> None:
         self._accept_command(command, COMMAND_PICK_AND_PLACE, STATE_RESERVED)
         self._send_pick_place_goal(command)
 
-    def _handle_stop(self, command: WorkcellCommand) -> None:
+    def _handle_stop(self, command: ArmCommand) -> None:
         stopped_command_id = self.active_command_id
         self._cancel_current_goal()
         self.command_active = False
@@ -253,7 +253,7 @@ class JetCobotArmManager(Node):
         if command.command_id:
             self._completed_command_ids.append(command.command_id)
 
-    def _handle_reset(self, command: WorkcellCommand) -> None:
+    def _handle_reset(self, command: ArmCommand) -> None:
         self._cancel_current_goal()
         self.emergency = False
         self.command_active = False
@@ -271,7 +271,7 @@ class JetCobotArmManager(Node):
 
     def _accept_command(
         self,
-        command: WorkcellCommand,
+        command: ArmCommand,
         command_type: str,
         state: str,
     ) -> None:
@@ -288,7 +288,7 @@ class JetCobotArmManager(Node):
             f"[{self.arm_name}] accepted command [{command.command_id}]"
         )
 
-    def _reject_command(self, command: WorkcellCommand, message: str) -> None:
+    def _reject_command(self, command: ArmCommand, message: str) -> None:
         self.last_command_id = command.command_id
         self.last_command_status = COMMAND_REJECTED
         self.progress = 0.0
@@ -321,7 +321,7 @@ class JetCobotArmManager(Node):
             self._completed_command_ids.append(command_id)
         self._publish_state()
 
-    def _send_pick_place_goal(self, command: WorkcellCommand) -> None:
+    def _send_pick_place_goal(self, command: ArmCommand) -> None:
         if not self._pick_place_client.wait_for_server(
             timeout_sec=float(self.config["pick_place"]["server_timeout"])
         ):
@@ -353,7 +353,7 @@ class JetCobotArmManager(Node):
             )
         )
 
-    def _task_id_for_command(self, command: WorkcellCommand) -> str:
+    def _task_id_for_command(self, command: ArmCommand) -> str:
         source = self.config["pick_place"]["task_id_source"]
         if source == "mission_id" and command.mission_id:
             return command.mission_id
@@ -502,7 +502,7 @@ class JetCobotArmManager(Node):
 
     def _publish_state(self) -> None:
         self.available = self._is_available()
-        msg = WorkcellState()
+        msg = ArmState()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.arm_name = self.arm_name
         msg.state = self.state

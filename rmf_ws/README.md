@@ -106,7 +106,7 @@ source install/setup.bash
 
 cd ../rmf_ws
 rosdep install --from-paths src --ignore-src -r -y \
-  --skip-keys "pinky_drive_msgs jetcobot_workcell_msgs"
+  --skip-keys "pinky_drive_msgs jetcobot_msgs"
 colcon build --symlink-install
 
 source install/setup.bash

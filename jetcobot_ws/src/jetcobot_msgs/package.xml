@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>jetcobot_workcell_msgs</name>
+  <name>jetcobot_msgs</name>
   <version>0.0.0</version>
-  <description>Workcell command and state interfaces for JetCobot arms.</description>
+  <description>Command, state, and action interfaces for JetCobot.</description>
   <maintainer email="ane@example.com">ane</maintainer>
   <license>Apache-2.0</license>
 

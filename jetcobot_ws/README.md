@@ -1,6 +1,6 @@
 # jetcobot_ws
 
-JetCobot ROS 2 워크스페이스입니다. `jetcobot_manager`가 RMF/workcell 명령을 받고, 별도 `pick_place_action_server`의 `jetcobot_workcell_msgs/action/PickPlace` action으로 pick-and-place를 요청합니다.
+JetCobot ROS 2 워크스페이스입니다. `jetcobot_manager`가 RMF/workcell 명령을 받고, 별도 `pick_place_action_server`의 `jetcobot_msgs/action/PickPlace` action으로 pick-and-place를 요청합니다.
 
 ## 패키지 구성
 
@@ -10,7 +10,7 @@ JetCobot ROS 2 워크스페이스입니다. `jetcobot_manager`가 RMF/workcell �
 | `jetcobot_moveit_config` | MoveIt 설정, `/move_action`, RViz launch |
 | `jetcobot_driver` | 실제 하드웨어용 `/arm_controller/follow_joint_trajectory`, `/gripper_controller/follow_joint_trajectory` action server |
 | `jetcobot_manager` | `/command`를 받아 `/pick_place` action goal 전송, `/state` publish |
-| `jetcobot_workcell_msgs` | workcell command/state 메시지 |
+| `jetcobot_msgs` | JetCobot command/state/action 인터페이스 |
 
 ## 실행 구조
 
@@ -42,7 +42,7 @@ source install/setup.bash
 
 ```bash
 colcon build --packages-select \
-  jetcobot_workcell_msgs \
+  jetcobot_msgs \
   jetcobot_manager \
   jetcobot_driver \
   jetcobot_moveit_config
@@ -139,7 +139,7 @@ ros2 topic echo /state
 ### 4. Pick-and-place 명령 전송
 
 ```bash
-ros2 topic pub --once /command jetcobot_workcell_msgs/msg/WorkcellCommand \
+ros2 topic pub --once /command jetcobot_msgs/msg/ArmCommand \
   "{arm_name: 'jetcobot1', command_id: 'cmd-001', command_type: 'pick_and_place', mission_id: 'mission-001'}"
 ```
 

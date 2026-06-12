@@ -2,15 +2,15 @@
 # RMF /jetcobot1/command -> jetcobot1 /command
 # jetcobot1 /state -> RMF /jetcobot1/state
 name: jetcobot1_domain_bridge
-from_domain: 31
-to_domain: 34
+from_domain: 30
+to_domain: 33
 
 topics:
   jetcobot1/command:
-    type: jetcobot_workcell_msgs/msg/WorkcellCommand
+    type: jetcobot_msgs/msg/ArmCommand
     remap: command
 
   state:
-    type: jetcobot_workcell_msgs/msg/WorkcellState
+    type: jetcobot_msgs/msg/ArmState
     remap: jetcobot1/state
     reversed: true

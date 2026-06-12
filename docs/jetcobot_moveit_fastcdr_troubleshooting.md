@@ -326,7 +326,7 @@ import rclpy
 from control_msgs.action import FollowJointTrajectory
 from sensor_msgs.msg import JointState
 from moveit_msgs.action import MoveGroup
-from jetcobot_workcell_msgs.msg import WorkcellCommand, WorkcellState
+from jetcobot_msgs.msg import ArmCommand, ArmState
 
 rclpy.init()
 node = rclpy.create_node("jetcobot_ros_smoke_test")

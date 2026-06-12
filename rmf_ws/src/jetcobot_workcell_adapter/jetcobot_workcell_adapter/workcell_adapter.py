@@ -5,7 +5,7 @@ import json
 import sys
 from typing import Any
 
-from jetcobot_workcell_msgs.msg import WorkcellCommand, WorkcellState
+from jetcobot_msgs.msg import ArmCommand, ArmState
 import rclpy
 from rclpy.node import Node
 from rmf_ingestor_msgs.msg import IngestorRequest, IngestorResult, IngestorState
@@ -68,11 +68,11 @@ class JetCobotWorkcellAdapter(Node):
         self._queue: deque[PendingRequest] = deque()
         self._active_request: PendingRequest | None = None
         self._completed_request_ids: set[str] = set()
-        self._last_arm_state: WorkcellState | None = None
+        self._last_arm_state: ArmState | None = None
         self._last_arm_state_time = None
 
         self._command_pub = self.create_publisher(
-            WorkcellCommand,
+            ArmCommand,
             self.command_topic,
             qos_depth,
         )
@@ -93,7 +93,7 @@ class JetCobotWorkcellAdapter(Node):
             qos_depth,
         )
         self._arm_state_sub = self.create_subscription(
-            WorkcellState,
+            ArmState,
             self.state_topic,
             self._on_arm_state,
             qos_depth,
@@ -144,7 +144,7 @@ class JetCobotWorkcellAdapter(Node):
             return True
         return any(entry.request.request_guid == request_guid for entry in self._queue)
 
-    def _on_arm_state(self, state: WorkcellState) -> None:
+    def _on_arm_state(self, state: ArmState) -> None:
         if state.arm_name and state.arm_name != self.arm_name:
             return
 
@@ -216,8 +216,8 @@ class JetCobotWorkcellAdapter(Node):
         self,
         request: IngestorRequest,
         arm_name: str,
-    ) -> WorkcellCommand:
-        command = WorkcellCommand()
+    ) -> ArmCommand:
+        command = ArmCommand()
         command.header.stamp = self.get_clock().now().to_msg()
         command.arm_name = arm_name
         command.command_id = request.request_guid

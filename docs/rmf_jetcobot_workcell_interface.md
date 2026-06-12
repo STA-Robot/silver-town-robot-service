@@ -17,7 +17,7 @@ Open-RMF
         v
 workcell_adapter
         |
-        | WorkcellCommand / WorkcellState
+        | ArmCommand / ArmState
         v
 jetcobot_arm_manager
         |
@@ -158,8 +158,8 @@ JetCobot domain 내부 topic:
 
 | Topic | 방향 | Message |
 |---|---|---|
-| `/command` | workcell_adapter -> arm_manager | `jetcobot_workcell_msgs/msg/WorkcellCommand` |
-| `/state` | arm_manager -> workcell_adapter | `jetcobot_workcell_msgs/msg/WorkcellState` |
+| `/command` | workcell_adapter -> arm_manager | `jetcobot_msgs/msg/ArmCommand` |
+| `/state` | arm_manager -> workcell_adapter | `jetcobot_msgs/msg/ArmState` |
 
 workcell/RMF domain에서는 로봇팔별 topic으로 bridge한다.
 
@@ -172,12 +172,12 @@ workcell/RMF domain에서는 로봇팔별 topic으로 bridge한다.
 
 `workcell_adapter`와 `jetcobot_arm_manager`가 같은 ROS domain에서 실행되는 경우에도 위 topic 이름을 그대로 사용할 수 있다.
 
-## WorkcellCommand
+## ArmCommand
 
 초안 message:
 
 ```text
-# jetcobot_workcell_msgs/msg/WorkcellCommand.msg
+# jetcobot_msgs/msg/ArmCommand.msg
 
 std_msgs/Header header
 string arm_name
@@ -215,12 +215,12 @@ MVP에서 우선 아래 값만 사용한다.
 | `stop` | 현재 arm motion 또는 sequence를 안전 정지한다. |
 | `reset` | 수동개입 후 arm 상태를 초기화하고 idle로 복귀한다. |
 
-## WorkcellState
+## ArmState
 
 초안 message:
 
 ```text
-# jetcobot_workcell_msgs/msg/WorkcellState.msg
+# jetcobot_msgs/msg/ArmState.msg
 
 std_msgs/Header header
 string arm_name
@@ -287,7 +287,7 @@ string message
 
 - `target_guid`가 자신이 관리하는 workcell id와 다르면 RMF request를 무시한다.
 - 요청을 받을 수 있으면 `/ingestor_results`에 `ACKNOWLEDGED`를 publish한다.
-- `target_guid`에 매핑된 JetCobot 이름을 찾고, 해당 arm topic으로 `WorkcellCommand(command_type=pick_and_place)`를 publish한다.
+- `target_guid`에 매핑된 JetCobot 이름을 찾고, 해당 arm topic으로 `ArmCommand(command_type=pick_and_place)`를 publish한다.
 - 지정된 JetCobot이 아직 사용할 수 없으면 request를 queue에 넣고 `/ingestor_states`의 `request_guid_queue`에 반영한다.
 - arm state에서 해당 `command_id`의 `succeeded`를 확인하면 `/ingestor_results`에 `SUCCESS`를 publish한다.
 - arm state에서 해당 `command_id`의 `failed`, `rejected`, `canceled`를 확인하면 `/ingestor_results`에 `FAILED`를 publish한다.
@@ -423,9 +423,9 @@ table_task_completed
 
 ## 구현 메모
 
-- 새 메시지 패키지는 `jetcobot_workcell_msgs`로 둔다.
+- 새 메시지 패키지는 `jetcobot_msgs`로 둔다.
 - 새 adapter 패키지는 `jetcobot_workcell_adapter` 또는 `pinky_workcell_adapter`로 둔다. 프로젝트 전체 용어를 맞추려면 `jetcobot_workcell_adapter`를 권장한다.
 - `workcell_adapter`는 `/ingestor_requests`, `/ingestor_states`, `/ingestor_results`를 제공한다.
 - `jetcobot_arm_manager`는 `/command` subscriber와 `/state` publisher를 제공한다.
-- `WorkcellState.msg`의 `active_command_id`, `last_command_id`, `last_command_status`로 command 결과를 확인한다.
+- `ArmState.msg`의 `active_command_id`, `last_command_id`, `last_command_status`로 command 결과를 확인한다.
 - 물품 종류별 분류 목적지, vision 옵션, retry 횟수는 `payload_json`에 넣고, 정책이 안정되면 별도 필드로 승격한다.

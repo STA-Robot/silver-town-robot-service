@@ -5,7 +5,7 @@
 JetCobot 관련 런타임은 두 ROS 2 패키지로 나뉩니다.
 
 - `trajectory_action_server`: `/arm_controller/follow_joint_trajectory`, `/gripper_controller/follow_joint_trajectory` action goal을 받아 실제 로봇에 관절/그리퍼 명령을 보냅니다.
-- `jetcobot_manager`: RMF 또는 상위 workcell 노드가 보내는 `/command`를 받아 `jetcobot_workcell_msgs/action/PickPlace` action server(`/pick_place`)에 goal을 보내고, 결과를 `/state`로 publish합니다.
+- `jetcobot_manager`: RMF 또는 상위 workcell 노드가 보내는 `/command`를 받아 `jetcobot_msgs/action/PickPlace` action server(`/pick_place`)에 goal을 보내고, 결과를 `/state`로 publish합니다.
 
 ## 빌드
 
@@ -13,7 +13,7 @@ Raspberry Pi bringup launch까지 사용할 때는 manager와 메시지 패키�
 
 ```bash
 cd jetcobot_ws
-colcon build --packages-select jetcobot_workcell_msgs jetcobot_manager jetcobot_driver
+colcon build --packages-select jetcobot_msgs jetcobot_manager jetcobot_driver
 source install/setup.bash
 ```
 
@@ -85,7 +85,7 @@ ros2 launch jetcobot_driver pi_bringup.launch.py \
 
 ## RMF 요청 처리 흐름
 
-RMF 또는 상위 노드는 `jetcobot_workcell_msgs/msg/WorkcellCommand` 메시지를 `/command`로 publish합니다.
+RMF 또는 상위 노드는 `jetcobot_msgs/msg/ArmCommand` 메시지를 `/command`로 publish합니다.
 
 요청 메시지 필드:
 
@@ -121,13 +121,13 @@ string payload_json
 `pick_and_place` 요청 예시:
 
 ```bash
-ros2 topic pub --once /command jetcobot_workcell_msgs/msg/WorkcellCommand \
+ros2 topic pub --once /command jetcobot_msgs/msg/ArmCommand \
   "{arm_name: 'jetcobot1', command_id: 'cmd-001', command_type: 'pick_and_place', mission_id: 'mission-001'}"
 ```
 
 ## RMF로 돌려주는 상태
 
-arm manager는 요청에 대한 별도 service response를 반환하지 않습니다. 대신 `jetcobot_workcell_msgs/msg/WorkcellState`를 `/state`로 계속 publish합니다.
+arm manager는 요청에 대한 별도 service response를 반환하지 않습니다. 대신 `jetcobot_msgs/msg/ArmState`를 `/state`로 계속 publish합니다.
 
 상태 메시지 필드:
 

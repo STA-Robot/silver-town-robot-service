@@ -8,53 +8,53 @@ from jetcobot_manager.arm_manager_node import (
 
 def _valid_config():
     return {
-        "joint_names": {
-            "arm": [
-                "joint2_to_joint1",
-                "joint3_to_joint2",
-                "joint4_to_joint3",
-                "joint5_to_joint4",
-                "joint6_to_joint5",
-                "joint6output_to_joint6",
-            ],
-            "gripper": ["gripper_controller"],
-        },
-        "joint_targets": {
-            "ready": {
-                "group": "arm",
-                "positions": [0.0, -0.4, -0.5, -0.6, 1.2, 0.0],
-            },
-            "gripper_open": {
-                "group": "gripper",
-                "positions": [0.1],
+        "pick_place": {
+            "action_name": "/pick_place",
+            "server_timeout": 5.0,
+            "seconds_estimate": 30.0,
+            "feedback_iteration_budget": 150,
+            "task_id_source": "command_id",
+            "state_map": {
+                "GO_READY": "homing",
+                "SEARCHING": "aligning",
+                "SERVO": "aligning",
+                "OFFSET_MOVE": "picking",
+                "DESCENDING": "picking",
+                "GRIPPING": "picking",
+                "LIFTING": "picking",
+                "SERVO_FAILED": "blocked",
             },
         },
-        "pick_and_place_sequence": [
-            {"target": "ready", "state": "homing"},
-            {"target": "gripper_open", "state": "picking"},
-        ],
     }
 
 
-def test_validate_arm_manager_config_accepts_valid_sequence():
+def test_validate_arm_manager_config_accepts_pick_place_config():
     config = validate_arm_manager_config(_valid_config())
 
-    assert len(config["pick_and_place_sequence"]) == 2
-    assert config["joint_targets"]["ready"]["positions"][1] == pytest.approx(-0.4)
-    assert config["motion"]["velocity_scaling"] == pytest.approx(0.1)
+    assert config["pick_place"]["action_name"] == "/pick_place"
+    assert config["pick_place"]["server_timeout"] == pytest.approx(5.0)
+    assert config["pick_place"]["state_map"]["GO_READY"] == "homing"
 
 
-def test_validate_arm_manager_config_rejects_bad_position_count():
+def test_validate_arm_manager_config_supplies_pick_place_defaults():
+    config = validate_arm_manager_config({})
+
+    assert config["pick_place"]["action_name"] == "/pick_place"
+    assert config["pick_place"]["feedback_iteration_budget"] == 150
+    assert config["pick_place"]["state_map"]["SERVO_FAILED"] == "blocked"
+
+
+def test_validate_arm_manager_config_rejects_bad_pick_place_section():
     config = _valid_config()
-    config["joint_targets"]["ready"]["positions"] = [0.0]
+    config["pick_place"] = []
 
-    with pytest.raises(ConfigError, match="expected 6"):
+    with pytest.raises(ConfigError, match="pick_place must be a mapping"):
         validate_arm_manager_config(config)
 
 
-def test_validate_arm_manager_config_rejects_unknown_sequence_target():
+def test_validate_arm_manager_config_rejects_bad_state_map():
     config = _valid_config()
-    config["pick_and_place_sequence"].append({"target": "missing"})
+    config["pick_place"]["state_map"] = []
 
-    with pytest.raises(ConfigError, match="unknown target"):
+    with pytest.raises(ConfigError, match="pick_place.state_map must be a mapping"):
         validate_arm_manager_config(config)

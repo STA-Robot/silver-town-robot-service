@@ -2,17 +2,17 @@
 
 RMF/workcell 명령을 JetCobot arm 동작으로 변환하는 ROS 2 Python 패키지입니다.
 
-`arm_manager` 노드는 `jetcobot_workcell_msgs/msg/WorkcellCommand`를 `/command`에서 받고, `jetcobot_workcell_msgs/action/PickPlace` action server(`/pick_place`)에 pick-and-place goal을 보냅니다. RMF/workcell 관점의 실행 상태와 결과는 manager가 `jetcobot_workcell_msgs/msg/WorkcellState`로 `/state`에 publish합니다.
+`arm_manager` 노드는 `jetcobot_msgs/msg/ArmCommand`를 `/command`에서 받고, `jetcobot_msgs/action/PickPlace` action server(`/pick_place`)에 pick-and-place goal을 보냅니다. RMF/workcell 관점의 실행 상태와 결과는 manager가 `jetcobot_msgs/msg/ArmState`로 `/state`에 publish합니다.
 
 ## 빌드
 
 ```bash
 cd jetcobot_ws
-colcon build --packages-select jetcobot_workcell_msgs jetcobot_manager
+colcon build --packages-select jetcobot_msgs jetcobot_manager
 source install/setup.bash
 ```
 
-실제 pick-and-place 실행에는 `jetcobot_workcell_msgs/action/PickPlace`를 쓰는 `pick_place_action_server`가 같은 ROS graph에 떠 있어야 합니다.
+실제 pick-and-place 실행에는 `jetcobot_msgs/action/PickPlace`를 쓰는 `pick_place_action_server`가 같은 ROS graph에 떠 있어야 합니다.
 
 ## 실행
 
@@ -44,7 +44,7 @@ ros2 run jetcobot_manager arm_manager --ros-args \
 예시:
 
 ```bash
-ros2 topic pub --once /command jetcobot_workcell_msgs/msg/WorkcellCommand \
+ros2 topic pub --once /command jetcobot_msgs/msg/ArmCommand \
   "{arm_name: 'jetcobot1', command_id: 'cmd-001', command_type: 'pick_and_place', mission_id: 'mission-001'}"
 ```
 
