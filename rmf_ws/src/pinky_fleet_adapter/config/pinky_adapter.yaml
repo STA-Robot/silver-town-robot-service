@@ -31,10 +31,15 @@ rmf_fleet:
   finishing_request: park
   responsive_wait: true
   task_event_topic: /task_events
-  # Nav2/map-frame yaw in radians to use when the destination is a parking spot.
+  # Nav2/map-frame yaw in radians to use for selected destinations.
   parking_yaws:
     pinky1_parking_spot: -1.5708
     pinky2_parking_spot: -1.5708
+    wp1: -1.5708
+    warehouse: 3.1416
+    table_1: 0.0
+    table_2: 1.5708
+    table_3: 0.0
   max_merge_waypoint_distance: 0.02
   max_merge_lane_distance: 0.02
   robots:
@@ -71,12 +76,12 @@ reference_coordinates:
   L1:
     rmf:
       - [0.1979133499029511, -0.2078090173980987] # pinky2_parking_spot
-      - [0.1979133499029511, -1.2468541043885921] # wp1
+      - [0.2078090173980987, -1.2468541043885921] # wp1
       - [0.3463483623301645, -0.2078090173980987] # pinky1_parking_spot
-      - [0.7916533996118046, -0.4255137022913449] # warehouse
+      - [0.5838443822137058, -0.3958266998059023] # warehouse
       - [0.5739487147185584, -0.9181695085372661] # table_1
       - [0.4947833747573778, -1.8504898215925931] # table_3
-      - [0.9301927445438704, -1.2468541043885921] # table_2
+      - [0.9202970770487228, -1.2468541043885921] # table_2
     robot:
       - [-0.02900, 1.62900] # pinky2_parking_spot
       - [-0.02000, 0.59900] # wp1
