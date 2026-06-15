@@ -27,6 +27,7 @@ setup(
     entry_points={
         'console_scripts': [
             'aiControllerNode = ai_controller.aiControllerNode:main',
+            'follower_node      = ai_controller.followerNode:main',#단독 실행
         ],
     },
 )

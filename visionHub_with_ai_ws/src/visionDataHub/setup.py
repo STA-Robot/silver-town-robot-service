@@ -27,7 +27,6 @@ setup(
     entry_points={
         'console_scripts': [
              'video_receiver_node = visionDataHub.video_receiver_node:main',
-             'followerNode = visionDataHub.followerNode:main',
         ],
     },
 )

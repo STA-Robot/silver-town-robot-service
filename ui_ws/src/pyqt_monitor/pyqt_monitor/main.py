@@ -6,7 +6,7 @@ import sys
 import threading
 import rclpy
 from PyQt5.QtWidgets import QApplication
-from pyqt_monitor.QTlayout import ControlUI
+from ui_ws.src.pyqt_monitor.pyqt_monitor.QTlayout import ControlUI
 
 
 def main():

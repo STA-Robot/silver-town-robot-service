@@ -1,8 +1,8 @@
 import sys
 import rclpy
 from PyQt5.QtWidgets import QApplication
-from client_monitor.table_call_client import TableCallClient
-from client_monitor.tableOrderwidget import TableOrderWidget
+from ui_ws.src.client_monitor.client_monitor.table_call_client import TableCallClient
+from ui_ws.src.client_monitor.client_monitor.tableOrderwidget import TableOrderWidget
 
 
 def main():

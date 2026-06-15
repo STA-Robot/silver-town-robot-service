@@ -1,5 +1,5 @@
-from pinky_follower.loggerMixin import LoggerMixin
-from pinky_follower.followController import FollowController
+from .loggerMixin import LoggerMixin
+from .followController import FollowController
 """
 AI 서버 메시지 프로토콜:
     FOLLOW,cx,cy,h  → 정상 추적

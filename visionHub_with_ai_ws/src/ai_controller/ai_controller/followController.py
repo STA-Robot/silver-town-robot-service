@@ -1,5 +1,5 @@
 import time
-from pinky_follower.loggerMixin import LoggerMixin
+from.loggerMixin import LoggerMixin
 
 
 class FollowController(LoggerMixin):
