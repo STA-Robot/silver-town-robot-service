@@ -1,21 +1,17 @@
 
 import json
 from std_msgs.msg import String
-from ai_controller.aicore.gestureRecognizer import GestureDebugInfo
+
 from ai_controller.aicore.targetTracker import TrackDebugInfo
 
-def _publish_inference(self, robot_name: str, t_dbg: TrackDebugInfo, g_dbg: GestureDebugInfo):
+def _publish_inference(self, robot_name: str, t_dbg: TrackDebugInfo, g_dbg:str ):
     msg      = String()
     msg.data = json.dumps({
         "robot_name": robot_name,
         "state":      self.fsm.state.name,
 
         # GestureDebugInfo
-        "gesture": {
-            "label": g_dbg.label,                          # str | None
-            "conf":  g_dbg.conf  if g_dbg.label else 0.0, # float
-            "box":   list(g_dbg.box) if g_dbg.box else [], # [x1,y1,x2,y2]
-        },
+        "gesture": g_dbg,
 
         # TrackDebugInfo
         "track": {

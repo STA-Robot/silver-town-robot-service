@@ -32,9 +32,6 @@ class AIControllerNode(Node):
         self.prev_msg:      Optional[str]         = None
         self.fsm = StateController()
 
-        # 디버그 발행 (GUI용)
-        self.result_pub = self.create_publisher(String, '/ai_debug', 10)
-
          # ── AI 추론 대상 구독 ──────────────────────────────────
         #pinky1,pinky2두개에 구독 
         self._subscribe_image('pinky1')
@@ -60,6 +57,14 @@ class AIControllerNode(Node):
             CompressedImage, topic, make_callback(robot_name), 10
         )
         self._image_subs[robot_name] = sub
+
+         # 디버그 발행 (GUI용)
+        for robot_name in self._image_subs:
+            if robot_name is not self._image_subs:
+                return
+            topic = f'/{robot_name}/ai_debug'
+            self.result_pub = self.create_publisher(String,topic, 10)
+
         self.get_logger().info(f"[AI] 구독 등록: {topic}")    
 
     def _start_inference(self, robot_name: str):
