@@ -6,6 +6,8 @@ ROS domain bridge를 사용할 때 RMF, `pinky1`, `pinky2`는 서로 다른 `ROS
 
 따라서 RMF adapter와 Pinky drive manager 사이의 명령은 범용 `/command` topic으로 전달한다. 명령 수락, 진행, 완료 여부는 `/state` topic의 `active_command_id`, `last_command_id`, `last_command_status` 필드로 확인한다.
 
+현재 운용 domain 배치는 Open-RMF, fleet adapter, task orchestrator를 `ROS_DOMAIN_ID=30`에서 실행하고, `pinky1`은 `31`, `pinky2`는 `32`를 사용한다.
+
 ## 목표
 
 - RMF -> Pinky: 주행, 정지, 사람 추종 등 명령을 하나의 topic으로 보낸다.
@@ -24,6 +26,14 @@ Pinky domain 내부 topic:
 | `/state` | Pinky -> RMF | `pinky_drive_msgs/msg/DriveState` |
 
 RMF domain에서는 로봇별 topic으로 bridge한다.
+
+현재 domain 배치:
+
+| 대상 | ROS_DOMAIN_ID |
+|---|---:|
+| Open-RMF, task_orchestrator, adapters | 30 |
+| pinky1 | 31 |
+| pinky2 | 32 |
 
 | RMF domain topic | Pinky domain topic |
 |---|---|
@@ -76,6 +86,7 @@ MVP에서 우선 아래 값만 사용한다.
 |---|---|
 | `navigate` | 지정 pose로 이동 |
 | `returning` | 복귀/대기 위치로 이동 |
+| `follow` | Pinky 내부 follower/person-tracking 노드로 사람 추종 시작 요청 |
 | `stop` | 현재 motion 명령 정지 |
 
 
@@ -183,9 +194,39 @@ Pinky publishes `/state`, bridged to RMF domain `/pinky1/state`
   last_command_status=succeeded
 ```
 
+Follow:
+
+```text
+RMF publishes `/pinky1/command`, bridged to Pinky domain `/command`
+  command_id=rmf-follow-001
+  command_type=follow
+  map_name=L1
+  target_name=person
+
+Pinky accepts the command and publishes `/state`
+  state=following
+  command_active=true
+  active_command_id=rmf-follow-001
+
+Pinky drive manager publishes `/follow_command` inside the Pinky domain
+  std_msgs/String.data={"command": "start", "robot": "pinky1"}
+
+Follower/person-tracking node finishes and publishes `/follow_event`
+  std_msgs/String.data=done
+
+Pinky publishes `/state`
+  state=idle
+  command_active=false
+  last_command_id=rmf-follow-001
+  last_command_status=succeeded
+```
+
 ## 구현 메모
 
 Drive manager는 Pinky domain 내부에서 `/command`, `/state`를 사용한다. RMF domain의 `/pinky1/command`, `/pinky1/state` 같은 로봇별 topic은 domain bridge remap으로 연결한다.
+Follow 명령을 수락한 뒤에는 Pinky domain 내부 `/follow_command`에
+`{"command": "start", "robot": "<robot_name>"}` JSON 문자열을 publish해서
+follower/person-tracking 노드가 어느 로봇의 요청인지 구분할 수 있게 한다.
 
 - `pinky_drive_msgs/msg/DriveCommand.msg` 사용
 - `DriveState.msg`의 `active_command_id`, `last_command_id`, `last_command_status`로 command 결과 확인

@@ -154,6 +154,8 @@ uint8 FAILED=2
 
 각 JetCobot이 별도 `ROS_DOMAIN_ID`에서 실행될 수 있으므로, JetCobot domain 내부 topic에는 로봇 namespace를 붙이지 않는다. 로봇 구분은 RMF/workcell domain 쪽 topic 이름과 domain bridge remap으로 처리한다.
 
+현재 운용 domain 배치는 Open-RMF, workcell adapter, task orchestrator를 `ROS_DOMAIN_ID=30`에서 실행하고, `jetcobot1`은 일단 `ROS_DOMAIN_ID=33`을 사용한다.
+
 JetCobot domain 내부 topic:
 
 | Topic | 방향 | Message |

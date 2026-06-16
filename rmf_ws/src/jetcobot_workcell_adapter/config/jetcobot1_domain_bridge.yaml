@@ -1,4 +1,4 @@
-# RMF domain 31 <-> jetcobot1 local domain 34
+# RMF domain 30 <-> jetcobot1 local domain 33
 # RMF /jetcobot1/command -> jetcobot1 /command
 # jetcobot1 /state -> RMF /jetcobot1/state
 name: jetcobot1_domain_bridge

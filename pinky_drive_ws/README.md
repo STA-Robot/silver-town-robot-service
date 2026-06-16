@@ -76,22 +76,23 @@ namespace가 아니라 domain bridge remap으로 처리한다. 따라서 Pinky d
 | TF | `map -> base_link` |
 | Battery topic | `/battery/percent` |
 | Emergency topic | `/emergency` |
-| Follow event topic | `/internal/follow_event` |
+| Follow command topic | `/follow_command` |
+| Follow event topic | `/follow_event` |
 
 RMF domain에서는 domain bridge가 로봇별 topic으로 remap한다.
 
 ```text
-RMF domain 31:     /pinky1/command  ->  pinky1 domain 32: /command
-RMF domain 31:     /pinky1/state    <-  pinky1 domain 32: /state
-RMF domain 31:     /pinky2/command  ->  pinky2 domain 33: /command
-RMF domain 31:     /pinky2/state    <-  pinky2 domain 33: /state
+RMF domain 30:     /pinky1/command  ->  pinky1 domain 31: /command
+RMF domain 30:     /pinky1/state    <-  pinky1 domain 31: /state
+RMF domain 30:     /pinky2/command  ->  pinky2 domain 32: /command
+RMF domain 30:     /pinky2/state    <-  pinky2 domain 32: /state
 ```
 
 Nav2와 TF가 준비되어 있는지 Pinky domain에서 확인한다.
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 action list | grep /navigate_to_pose
-ROS_DOMAIN_ID=32 ros2 run tf2_ros tf2_echo map base_link
+ROS_DOMAIN_ID=31 ros2 action list | grep /navigate_to_pose
+ROS_DOMAIN_ID=31 ros2 run tf2_ros tf2_echo map base_link
 ```
 
 ## 단일 로봇 실행
@@ -105,7 +106,7 @@ cd pinky_drive_ws
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 
-ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
+ROS_DOMAIN_ID=31 ros2 launch pinky_drive_manager drive_manager.launch.py \
   robot_name:=pinky1 \
   rmf_level:=L1
 ```
@@ -117,7 +118,7 @@ cd pinky_drive_ws
 source /opt/ros/jazzy/setup.bash
 source install/setup.bash
 
-ROS_DOMAIN_ID=33 ros2 launch pinky_drive_manager drive_manager.launch.py \
+ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
   robot_name:=pinky2 \
   rmf_level:=L1
 ```
@@ -125,7 +126,7 @@ ROS_DOMAIN_ID=33 ros2 launch pinky_drive_manager drive_manager.launch.py \
 시뮬레이션 시간을 쓰는 경우:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
+ROS_DOMAIN_ID=31 ros2 launch pinky_drive_manager drive_manager.launch.py \
   robot_name:=pinky1 \
   rmf_level:=L1 \
   use_sim_time:=true
@@ -140,7 +141,7 @@ ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
 디버그 목적으로 같은 domain에 여러 노드를 띄워야 할 때만 사용한다.
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager multi_drive_manager.launch.py \
+ROS_DOMAIN_ID=31 ros2 launch pinky_drive_manager multi_drive_manager.launch.py \
   robot_names:=pinky1,pinky2 \
   rmf_level:=L1
 ```
@@ -167,13 +168,14 @@ src/pinky_drive_manager/config/pinky_drive_manager.yaml
 | `nav2_action` | Pinky domain 내부 Nav2 action 이름. 기본 `/navigate_to_pose` |
 | `battery_percent_topic` | battery SOC topic. `0.0~1.0` 또는 `0~100` 허용 |
 | `emergency_topic` | emergency input topic |
+| `follow_command_topic` | drive manager가 follower 노드에 시작 명령을 보내는 내부 topic |
 | `follow_event_topic` | follower 노드가 상태 전이를 알려주는 내부 topic |
 | `state_publish_frequency` | `/state` publish 주기 |
 
 패키지 설치 후 다른 config를 쓰려면:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
+ROS_DOMAIN_ID=31 ros2 launch pinky_drive_manager drive_manager.launch.py \
   config_file:=/path/to/pinky_drive_manager.yaml \
   robot_name:=pinky1
 ```
@@ -186,54 +188,64 @@ ROS_DOMAIN_ID=32 ros2 launch pinky_drive_manager drive_manager.launch.py \
 상태 확인:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic echo /state
+ROS_DOMAIN_ID=31 ros2 topic echo /state
 ```
 
 navigation command 전송:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
   "{robot_name: 'pinky1', command_id: 'manual-nav-001', command_type: 'navigate', map_name: 'L1', x: 1.0, y: 2.0, yaw: 0.0, speed_limit: 0.0, target_name: 'test', payload_json: ''}"
 ```
 
 returning command 전송:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
   "{robot_name: 'pinky1', command_id: 'manual-return-001', command_type: 'returning', map_name: 'L1', x: 0.0, y: 0.0, yaw: 0.0, speed_limit: 0.0, target_name: 'home', payload_json: ''}"
 ```
 
 follow command 전송:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
   "{robot_name: 'pinky1', command_id: 'manual-follow-001', command_type: 'follow', map_name: 'L1', target_name: 'person', payload_json: ''}"
+```
+
+drive manager는 follow command를 수락하면 follower 노드에 아래 JSON 문자열을 publish한다.
+
+```bash
+ROS_DOMAIN_ID=31 ros2 topic echo /follow_command
+```
+
+```json
+{"command": "start", "robot": "pinky1"}
 ```
 
 정지:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /command pinky_drive_msgs/msg/DriveCommand \
   "{robot_name: 'pinky1', command_id: 'manual-stop-001', command_type: 'stop', map_name: 'L1'}"
 ```
 
 emergency on/off 테스트:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic pub --once /emergency std_msgs/msg/Bool "{data: true}"
-ROS_DOMAIN_ID=32 ros2 topic pub --once /emergency std_msgs/msg/Bool "{data: false}"
+ROS_DOMAIN_ID=31 ros2 topic pub --once /emergency std_msgs/msg/Bool "{data: true}"
+ROS_DOMAIN_ID=31 ros2 topic pub --once /emergency std_msgs/msg/Bool "{data: false}"
 ```
 
 following 상태 이벤트 테스트:
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 topic pub --once /internal/follow_event std_msgs/msg/String \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /follow_event std_msgs/msg/String \
   "{data: 'start'}"
 
-ROS_DOMAIN_ID=32 ros2 topic pub --once /internal/follow_event std_msgs/msg/String \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /follow_event std_msgs/msg/String \
   "{data: 'blocked'}"
 
-ROS_DOMAIN_ID=32 ros2 topic pub --once /internal/follow_event std_msgs/msg/String \
+ROS_DOMAIN_ID=31 ros2 topic pub --once /follow_event std_msgs/msg/String \
   "{data: 'done'}"
 ```
 
@@ -257,9 +269,9 @@ domain bridge remap을 통해 로봇별 topic으로 보이게 한다.
 `state == unknown`이 계속 유지되면 Pinky domain에서 아래를 확인한다.
 
 ```bash
-ROS_DOMAIN_ID=32 ros2 action list | grep /navigate_to_pose
-ROS_DOMAIN_ID=32 ros2 run tf2_ros tf2_echo map base_link
-ROS_DOMAIN_ID=32 ros2 topic echo /state
+ROS_DOMAIN_ID=31 ros2 action list | grep /navigate_to_pose
+ROS_DOMAIN_ID=31 ros2 run tf2_ros tf2_echo map base_link
+ROS_DOMAIN_ID=31 ros2 topic echo /state
 ```
 
 command가 `rejected`가 되면 보통 아래 중 하나다.

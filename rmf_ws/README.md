@@ -26,8 +26,8 @@ rmf_ws/
     pinky_fleet_adapter/
       config/
         pinky_adapter.yaml           # fleet, robot, coordinate transform 설정
-        pinky1_domain_bridge.yaml      # RMF domain 31 <-> pinky1 domain 32 bridge
-        pinky2_domain_bridge.yaml      # RMF domain 31 <-> pinky2 domain 33 bridge
+        pinky1_domain_bridge.yaml      # RMF domain 30 <-> pinky1 domain 31 bridge
+        pinky2_domain_bridge.yaml      # RMF domain 30 <-> pinky2 domain 32 bridge
       launch/
         pinky_domain_bridges.launch.py
         pinky_fleet_adapter.launch.py
@@ -52,7 +52,7 @@ rmf_ws/
     jetcobot_workcell_adapter/
       config/
         workcell_adapter.yaml          # RMF ingestor <-> JetCobot command 설정
-        jetcobot1_domain_bridge.yaml   # RMF domain 31 <-> jetcobot1 domain 34 bridge
+        jetcobot1_domain_bridge.yaml   # RMF domain 30 <-> jetcobot1 domain 33 bridge
       launch/
         workcell_adapter.launch.py
         jetcobot_domain_bridges.launch.py
@@ -125,13 +125,13 @@ source install/setup.bash
 ## 실행 흐름
 
 1. 각 Pinky local domain에서 Nav2와 `pinky_drive_manager`를 실행한다.
-   - pinky1 예: `ROS_DOMAIN_ID=32`
-   - pinky2 예: `ROS_DOMAIN_ID=33`
+   - pinky1 예: `ROS_DOMAIN_ID=31`
+   - pinky2 예: `ROS_DOMAIN_ID=32`
 2. JetCobot local domain에서 MoveIt, driver, `jetcobot_manager`를 실행한다.
-   - jetcobot1 예: `ROS_DOMAIN_ID=34`
+   - jetcobot1 예: `ROS_DOMAIN_ID=33`
    - local topic은 `/command`, `/state`를 유지한다.
-3. RMF domain에서 domain bridge를 실행한다.
-4. RMF domain에서 `rmf_bringup` 통합 launch를 실행한다.
+3. RMF domain(`ROS_DOMAIN_ID=30`)에서 domain bridge를 실행한다.
+4. RMF domain(`ROS_DOMAIN_ID=30`)에서 `rmf_bringup` 통합 launch를 실행한다.
    - 기본으로 RMF schedule node, task dispatcher, building map server를 함께 실행한다.
    - 이어서 fleet adapter, workcell adapter, task orchestrator를 실행한다.
 
@@ -141,29 +141,29 @@ source install/setup.bash
 
 | 대상 | ROS_DOMAIN_ID | local topic | RMF domain topic |
 |---|---:|---|---|
-| RMF | 31 | - | - |
-| pinky1 | 32 | `/command`, `/state` | `/pinky1/command`, `/pinky1/state` |
-| pinky2 | 33 | `/command`, `/state` | `/pinky2/command`, `/pinky2/state` |
-| jetcobot1 | 34 | `/command`, `/state` | `/jetcobot1/command`, `/jetcobot1/state` |
+| Open-RMF, task_orchestrator, adapters | 30 | - | - |
+| pinky1 | 31 | `/command`, `/state` | `/pinky1/command`, `/pinky1/state` |
+| pinky2 | 32 | `/command`, `/state` | `/pinky2/command`, `/pinky2/state` |
+| jetcobot1 | 33 | `/command`, `/state` | `/jetcobot1/command`, `/jetcobot1/state` |
 
 Pinky bridge 설정 파일은 `pinky_fleet_adapter/config`에 있다.
 
 | 파일 | 의미 |
 |---|---|
-| `pinky1_domain_bridge.yaml` | RMF domain 31과 pinky1 domain 32 연결 |
-| `pinky2_domain_bridge.yaml` | RMF domain 31과 pinky2 domain 33 연결 |
+| `pinky1_domain_bridge.yaml` | RMF domain 30과 pinky1 domain 31 연결 |
+| `pinky2_domain_bridge.yaml` | RMF domain 30과 pinky2 domain 32 연결 |
 
 JetCobot bridge 설정 파일은 `jetcobot_workcell_adapter/config`에 있다.
 
 | 파일 | 의미 |
 |---|---|
-| `jetcobot1_domain_bridge.yaml` | RMF domain 31과 jetcobot1 domain 34 연결 |
+| `jetcobot1_domain_bridge.yaml` | RMF domain 30과 jetcobot1 domain 33 연결 |
 
 `reversed: true`는 bridge 방향을 뒤집는다. 예를 들어 pinky1 설정에서:
 
 ```yaml
-from_domain: 31
-to_domain: 32
+from_domain: 30
+to_domain: 31
 
 topics:
   pinky1/command:
@@ -179,8 +179,8 @@ topics:
 의미는 아래와 같다.
 
 ```text
-31 /pinky1/command -> 32 /command
-32 /state          -> 31 /pinky1/state
+30 /pinky1/command -> 31 /command
+31 /state          -> 30 /pinky1/state
 ```
 
 bridge launch 사용법:
@@ -211,10 +211,10 @@ ros2 run domain_bridge domain_bridge \
 bridge 확인:
 
 ```bash
-ROS_DOMAIN_ID=31 ros2 topic list | grep pinky
-ROS_DOMAIN_ID=31 ros2 topic echo /pinky1/state
-ROS_DOMAIN_ID=31 ros2 topic list | grep jetcobot
-ROS_DOMAIN_ID=31 ros2 topic echo /jetcobot1/state
+ROS_DOMAIN_ID=30 ros2 topic list | grep pinky
+ROS_DOMAIN_ID=30 ros2 topic echo /pinky1/state
+ROS_DOMAIN_ID=30 ros2 topic list | grep jetcobot
+ROS_DOMAIN_ID=30 ros2 topic echo /jetcobot1/state
 ```
 
 `pinky_fleet_adapter`는 Open-RMF fleet adapter 역할을 맡고, `RobotClientAPI.py`는
@@ -375,8 +375,9 @@ ros2 topic echo /pinky1/state
 ```
 
 정상 수락되면 `state=following`, `last_command_status=accepted`가 publish된다.
-현재 follow 동작 자체는 Pinky drive manager의 follower/person-tracking 연동 지점에
-연결될 예정이다.
+Pinky drive manager는 Pinky domain 내부 `/follow_command`에
+`{"command": "start", "robot": "pinky1"}` 형태의 JSON 문자열을 publish하고,
+follower/person-tracking 노드는 이 topic을 구독해 추종을 시작한다.
 
 follow를 중단하려면 `/cancel_follow_call` service를 호출한다. orchestrator는
 `/follow_call`로 제출한 follow task의 RMF `task_id`를 로봇별로 추적하고,
