@@ -107,7 +107,7 @@ Fleet-level dispatch 예시:
         }
       ]
     },
-    "requester": "pinky_task_orchestrator",
+    "requester": "task_orchestrator",
     "fleet_name": "pinky",
     "labels": ["mission_001", "table_collection", "tent_1"]
   }
@@ -125,22 +125,46 @@ Fleet-level dispatch 예시:
     "category": "compose",
     "description": {
       "category": "warehouse_move",
-      "detail": "Move assigned robot to warehouse",
+      "detail": "Move assigned robot to warehouse and hold for workcell",
       "phases": [
         {
           "activity": {
-            "category": "go_to_place",
-            "description": "warehouse"
+            "category": "sequence",
+            "description": {
+              "activities": [
+                {
+                  "category": "go_to_place",
+                  "description": "warehouse"
+                },
+                {
+                  "category": "perform_action",
+                  "description": {
+                    "category": "wait_at_warehouse",
+                    "description": {
+                      "mission_id": "mission_001",
+                      "table": "warehouse",
+                      "seconds": 10
+                    },
+                    "unix_millis_action_duration_estimate": 10000
+                  }
+                }
+              ]
+            }
           }
         }
       ]
     },
-    "requester": "pinky_task_orchestrator",
+    "requester": "task_orchestrator",
     "fleet_name": "pinky",
     "labels": ["mission_001", "warehouse_move", "warehouse"]
   }
 }
 ```
+
+`wait_at_warehouse`는 workcell pick/place가 끝날 때까지 Pinky를 창고에 대기시키는
+hold action이다. orchestrator는 이 action의 `/task_events` started 이벤트를
+workcell request 제출 트리거로 사용하고, workcell 최종 결과 후 warehouse task에
+`kill_task_request`를 보내 hold를 해제한다.
 
 ### Service 방식
 
@@ -236,12 +260,12 @@ Robot/Fleet 상태 확인에 사용한다.
 
 ---
 
-## 5. Pinky Workflow 기준 권장 구조
+## 5. 서비스 Workflow 기준 권장 구조
 
 Table call이 들어오면:
 
 ```text
-pinky_task_orchestrator
+task_orchestrator
   -> task_api_requests 또는 /task_api_service
   -> dispatch_task_request
 ```

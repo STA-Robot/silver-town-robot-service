@@ -1,0 +1,10 @@
+target_guid: warehouse_pick_place_jetcobot1
+arm_name: jetcobot1
+command_topic: /jetcobot1/command
+state_topic: /jetcobot1/state
+ingestor_request_topic: /ingestor_requests
+ingestor_state_topic: /ingestor_states
+ingestor_result_topic: /ingestor_results
+state_publish_frequency: 2.0
+arm_state_timeout_sec: 5.0
+qos_depth: 10

@@ -1,4 +1,5 @@
 import argparse
+import json
 import math
 import sys
 from copy import deepcopy
@@ -391,7 +392,12 @@ class DriveManagerNode(Node):
 
     def _start_follow(self, command: DriveCommand) -> None:
         msg = String()
-        msg.data = "start"
+        msg.data = json.dumps(
+            {
+                "command": "start",
+                "robot": self.robot_name,
+            }
+        )
         self.follow_command_pub.publish(msg)
         self.get_logger().info(
             f"[{self.robot_name}] published follow start command "

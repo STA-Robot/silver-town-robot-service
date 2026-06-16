@@ -25,6 +25,7 @@ rosbag2_*/
 *.traffic_editor.tmp
 fleet_adapter.log
 rmf_traffic_schedule*.db
+.rmf_schedule_node.yaml
 
 # Gazebo / Ignition / RViz runtime files
 .gazebo/

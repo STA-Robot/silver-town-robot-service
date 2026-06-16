@@ -1,0 +1,15 @@
+pick_place:
+  action_name: /pick_place
+  server_timeout: 5.0
+  seconds_estimate: 30.0
+  feedback_iteration_budget: 150
+  task_id_source: command_id
+  state_map:
+    GO_READY: homing
+    SEARCHING: aligning
+    SERVO: aligning
+    OFFSET_MOVE: picking
+    DESCENDING: picking
+    GRIPPING: picking
+    LIFTING: picking
+    SERVO_FAILED: blocked

@@ -1,0 +1,76 @@
+building_name: silver_town_map
+doors: {}
+levels:
+  L1:
+    lanes:
+    - - 0
+      - 1
+      - {is_bidirectional: false}
+    - - 2
+      - 1
+      - {is_bidirectional: false}
+    - - 3
+      - 0
+      - {is_bidirectional: false}
+    - - 3
+      - 2
+      - {is_bidirectional: false}
+    - - 0
+      - 4
+      - {is_bidirectional: false}
+    - - 2
+      - 4
+      - {is_bidirectional: false}
+    - - 4
+      - 1
+      - {}
+    - - 1
+      - 4
+      - {}
+    - - 1
+      - 5
+      - {}
+    - - 5
+      - 1
+      - {}
+    - - 5
+      - 6
+      - {}
+    - - 6
+      - 5
+      - {}
+    - - 6
+      - 4
+      - {}
+    - - 4
+      - 6
+      - {}
+    - - 4
+      - 3
+      - {is_bidirectional: false}
+    - - 6
+      - 3
+      - {is_bidirectional: false}
+    vertices:
+    - - 0.19791334990295115
+      - -0.2078090173980987
+      - {is_charger: true, is_holding_point: true, is_parking_spot: true, name: pinky2_parking_spot}
+    - - 0.2078090173980987
+      - -1.2468541043885921
+      - {name: wp1}
+    - - 0.34634836233016447
+      - -0.2078090173980987
+      - {is_charger: true, is_holding_point: true, is_parking_spot: true, name: pinky1_parking_spot}
+    - - 0.5838443822137058
+      - -0.3958266998059023
+      - {dropoff_ingestor: '', name: warehouse}
+    - - 0.5739487147185584
+      - -0.9181695085372661
+      - {name: table_1}
+    - - 0.4947833747573778
+      - -1.8504898215925931
+      - {name: table_3}
+    - - 0.9202970770487228
+      - -1.2468541043885921
+      - {name: table_2}
+lifts: {}

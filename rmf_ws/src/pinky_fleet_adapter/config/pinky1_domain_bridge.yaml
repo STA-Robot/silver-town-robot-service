@@ -1,0 +1,32 @@
+# RMF domain 30 <-> pinky1 local domain 31
+# RMF /pinky1/command -> pinky1 /command
+# pinky1 /state -> RMF /pinky1/state
+# pinky1 /follow_command -> RMF /follow_command
+# RMF /pinky1/follow_event -> pinky1 /follow_event
+# RMF /pinky1/cmd_vel -> pinky1 /cmd_vel
+name: pinky1_domain_bridge
+from_domain: 30
+to_domain: 31
+
+topics:
+  pinky1/command:
+    type: pinky_drive_msgs/msg/DriveCommand
+    remap: command
+
+  state:
+    type: pinky_drive_msgs/msg/DriveState
+    remap: pinky1/state
+    reversed: true
+
+  follow_command:
+    type: std_msgs/msg/String
+    remap: follow_command
+    reversed: true
+
+  pinky1/follow_event:
+    type: std_msgs/msg/String
+    remap: follow_event
+
+  pinky1/cmd_vel:
+    type: geometry_msgs/msg/Twist
+    remap: cmd_vel

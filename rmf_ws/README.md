@@ -1,65 +1,78 @@
-# Pinky RMF Workspace
+# RMF Workspace
 
-이 workspace는 Pinky fleet을 RMF에 붙이기 위한 map, navigation graph, fleet
-adapter 설정, adapter 코드, workflow orchestrator를 담는다.
+이 workspace는 RMF map, navigation graph, 공통 workflow orchestrator,
+Pinky fleet adapter, JetCobot workcell adapter 설정과 adapter 코드를 담는다.
 
 실제 로봇 drive API는 `../pinky_drive_ws`의 `pinky_drive_manager`가 제공하고,
 이 workspace의 adapter는 RMF domain에서 보이는 `/pinkyX/command`, `/pinkyX/state`
 topic으로 각 로봇과 통신한다. Pinky local domain의 `/command`, `/state`와 RMF
 domain의 로봇별 topic은 `domain_bridge`가 remap한다.
 
+JetCobot arm manager도 같은 패턴을 쓴다. JetCobot local domain에서는
+`/command`, `/state`를 쓰고, RMF/workcell domain에서는
+`/jetcobot1/command`, `/jetcobot1/state`로 remap한다.
+
 ## 디렉토리 구조
 
 ```text
 rmf_ws/
   src/
-    pinky_rmf_maps/
+    rmf_maps/
       maps/
-        rmf-test.building.yaml       # traffic-editor/building map 원본
+        silver_town_map.building.yaml # traffic-editor/building map 원본
       nav_graphs/
-        0.yaml                       # RMF fleet adapter가 사용하는 nav graph
+        1.yaml                       # RMF fleet adapter가 사용하는 nav graph
 
-    pinky_rmf_adapter/
+    pinky_fleet_adapter/
       config/
         pinky_adapter.yaml           # fleet, robot, coordinate transform 설정
-        pinky1_domain_bridge.yaml      # RMF domain 31 <-> pinky1 domain 32 bridge
-        pinky2_domain_bridge.yaml      # RMF domain 31 <-> pinky2 domain 33 bridge
+        pinky1_domain_bridge.yaml      # RMF domain 30 <-> pinky1 domain 31 bridge
+        pinky2_domain_bridge.yaml      # RMF domain 30 <-> pinky2 domain 32 bridge
       launch/
         pinky_domain_bridges.launch.py
         pinky_fleet_adapter.launch.py
-      pinky_rmf_adapter/
+      pinky_fleet_adapter/
         pinky_fleet_adapter.py        # Open-RMF fleet adapter
         RobotClientAPI.py            # Pinky drive API 연결 구현 위치
 
-    pinky_task_msgs/
+    task_msgs/
       srv/
         TableCall.srv                # table call service interface
         FollowCall.srv               # 특정 Pinky follow 시작 service interface
         CancelFollow.srv             # follow task 취소 service interface
 
-    pinky_task_orchestrator/
+    task_orchestrator/
       config/
         task_orchestrator.yaml       # task API, fleet, workflow 기본 설정
       launch/
         task_orchestrator.launch.py
-      pinky_task_orchestrator/
-        pinky_task_orchestrator.py   # table/follow call, mission, warehouse orchestration
+      task_orchestrator/
+        task_orchestrator.py   # table/follow call, mission, warehouse orchestration
 
-    pinky_rmf_bringup/
+    jetcobot_workcell_adapter/
+      config/
+        workcell_adapter.yaml          # RMF ingestor <-> JetCobot command 설정
+        jetcobot1_domain_bridge.yaml   # RMF domain 30 <-> jetcobot1 domain 33 bridge
+      launch/
+        workcell_adapter.launch.py
+        jetcobot_domain_bridges.launch.py
+
+    rmf_bringup/
       launch/
         rmf_core.launch.py           # RMF schedule, task dispatcher, map server 실행
-        pinky_rmf.launch.py          # RMF core, adapter, orchestrator 통합 실행
+        rmf.launch.py                # RMF core, adapter, orchestrator 통합 실행
 ```
 
 ## 패키지 역할
 
 | 패키지 | 역할 |
 |---|---|
-| `pinky_rmf_maps` | building map 원본과 생성된 nav graph를 보관하고 install한다. |
-| `pinky_rmf_adapter` | Pinky fleet adapter 코드와 adapter 설정을 보관한다. |
-| `pinky_task_msgs` | task orchestrator 외부 입력용 service interface를 제공한다. |
-| `pinky_task_orchestrator` | table call과 follow call을 RMF task로 제출하고 mission workflow를 관리한다. |
-| `pinky_rmf_bringup` | RMF core, adapter, task orchestrator launch를 묶는다. |
+| `rmf_maps` | building map 원본과 생성된 nav graph를 보관하고 install한다. |
+| `pinky_fleet_adapter` | Pinky fleet adapter 코드와 adapter 설정을 보관한다. |
+| `jetcobot_workcell_adapter` | RMF ingestor request를 JetCobot workcell command로 bridge한다. |
+| `task_msgs` | task orchestrator 외부 입력용 service interface를 제공한다. |
+| `task_orchestrator` | table call과 follow call을 RMF task로 제출하고 mission workflow를 관리한다. |
+| `rmf_bringup` | RMF core, adapter, task orchestrator launch를 묶는다. |
 
 ## YAML 파일 위치
 
@@ -67,12 +80,12 @@ PoC 때 루트에 있던 파일은 아래처럼 옮겼다.
 
 | 기존 파일 | 새 위치 |
 |---|---|
-| `rmf-test.building.yaml` | `src/pinky_rmf_maps/maps/rmf-test.building.yaml` |
-| `0.yaml` | `src/pinky_rmf_maps/nav_graphs/0.yaml` |
-| `pinky_adapter.yaml` | `src/pinky_rmf_adapter/config/pinky_adapter.yaml` |
+| `silver_town_map.building.yaml` | `src/rmf_maps/maps/silver_town_map.building.yaml` |
+| `1.yaml` | `src/rmf_maps/nav_graphs/1.yaml` |
+| `pinky_adapter.yaml` | `src/pinky_fleet_adapter/config/pinky_adapter.yaml` |
 
-`rmf-test.building.yaml` 안의 drawing image는 `../maps/test_map.png`를 참조한다.
-실제 Ubuntu 실행 환경에서는 해당 이미지도 `src/pinky_rmf_maps/maps/test_map.png`에
+`silver_town_map.building.yaml` 안의 drawing image는 `../maps/map_final.png`를 참조한다.
+실제 Ubuntu 실행 환경에서는 해당 이미지도 `src/rmf_maps/maps/map_final.png`에
 두면 된다.
 
 ## 빌드
@@ -87,31 +100,40 @@ cd pinky_drive_ws
 colcon build --symlink-install
 source install/setup.bash
 
+cd ../jetcobot_ws
+colcon build --symlink-install
+source install/setup.bash
+
 cd ../rmf_ws
-rosdep install --from-paths src --ignore-src -r -y --skip-keys pinky_drive_msgs
+rosdep install --from-paths src --ignore-src -r -y \
+  --skip-keys "pinky_drive_msgs jetcobot_msgs"
 colcon build --symlink-install
 
 source install/setup.bash
 ```
 
-새 터미널을 열 때마다 `pinky_drive_ws`를 먼저 source한 뒤 `rmf_ws`를 source한다.
+새 터미널을 열 때마다 `pinky_drive_ws`, `jetcobot_ws`, `rmf_ws` 순서로 source한다.
 
 ```bash
 source /opt/ros/jazzy/setup.bash
 cd rmf_ws
 source ../pinky_drive_ws/install/setup.bash
+source ../jetcobot_ws/install/setup.bash
 source install/setup.bash
 ```
 
 ## 실행 흐름
 
 1. 각 Pinky local domain에서 Nav2와 `pinky_drive_manager`를 실행한다.
-   - pinky1 예: `ROS_DOMAIN_ID=32`
-   - pinky2 예: `ROS_DOMAIN_ID=33`
-2. RMF domain에서 domain bridge를 실행한다.
-3. RMF domain에서 `pinky_rmf_bringup` 통합 launch를 실행한다.
+   - pinky1 예: `ROS_DOMAIN_ID=31`
+   - pinky2 예: `ROS_DOMAIN_ID=32`
+2. JetCobot local domain에서 MoveIt, driver, `jetcobot_manager`를 실행한다.
+   - jetcobot1 예: `ROS_DOMAIN_ID=33`
+   - local topic은 `/command`, `/state`를 유지한다.
+3. RMF domain(`ROS_DOMAIN_ID=30`)에서 domain bridge를 실행한다.
+4. RMF domain(`ROS_DOMAIN_ID=30`)에서 `rmf_bringup` 통합 launch를 실행한다.
    - 기본으로 RMF schedule node, task dispatcher, building map server를 함께 실행한다.
-   - 이어서 fleet adapter와 task orchestrator를 실행한다.
+   - 이어서 fleet adapter, workcell adapter, task orchestrator를 실행한다.
 
 ### Domain Bridge
 
@@ -119,22 +141,29 @@ source install/setup.bash
 
 | 대상 | ROS_DOMAIN_ID | local topic | RMF domain topic |
 |---|---:|---|---|
-| RMF | 31 | - | - |
-| pinky1 | 32 | `/command`, `/state` | `/pinky1/command`, `/pinky1/state` |
-| pinky2 | 33 | `/command`, `/state` | `/pinky2/command`, `/pinky2/state` |
+| Open-RMF, task_orchestrator, adapters | 30 | - | - |
+| pinky1 | 31 | `/command`, `/state`, `/follow_command`, `/follow_event`, `/cmd_vel` | `/pinky1/command`, `/pinky1/state`, `/follow_command`, `/pinky1/follow_event`, `/pinky1/cmd_vel` |
+| pinky2 | 32 | `/command`, `/state`, `/follow_command`, `/follow_event`, `/cmd_vel` | `/pinky2/command`, `/pinky2/state`, `/follow_command`, `/pinky2/follow_event`, `/pinky2/cmd_vel` |
+| jetcobot1 | 33 | `/command`, `/state` | `/jetcobot1/command`, `/jetcobot1/state` |
 
-bridge 설정 파일은 `pinky_rmf_adapter/config`에 있다.
+Pinky bridge 설정 파일은 `pinky_fleet_adapter/config`에 있다.
 
 | 파일 | 의미 |
 |---|---|
-| `pinky1_domain_bridge.yaml` | RMF domain 31과 pinky1 domain 32 연결 |
-| `pinky2_domain_bridge.yaml` | RMF domain 31과 pinky2 domain 33 연결 |
+| `pinky1_domain_bridge.yaml` | RMF domain 30과 pinky1 domain 31 연결 |
+| `pinky2_domain_bridge.yaml` | RMF domain 30과 pinky2 domain 32 연결 |
+
+JetCobot bridge 설정 파일은 `jetcobot_workcell_adapter/config`에 있다.
+
+| 파일 | 의미 |
+|---|---|
+| `jetcobot1_domain_bridge.yaml` | RMF domain 30과 jetcobot1 domain 33 연결 |
 
 `reversed: true`는 bridge 방향을 뒤집는다. 예를 들어 pinky1 설정에서:
 
 ```yaml
-from_domain: 31
-to_domain: 32
+from_domain: 30
+to_domain: 31
 
 topics:
   pinky1/command:
@@ -145,13 +174,29 @@ topics:
     type: pinky_drive_msgs/msg/DriveState
     remap: pinky1/state
     reversed: true
+
+  follow_command:
+    type: std_msgs/msg/String
+    remap: follow_command
+    reversed: true
+
+  pinky1/follow_event:
+    type: std_msgs/msg/String
+    remap: follow_event
+
+  pinky1/cmd_vel:
+    type: geometry_msgs/msg/Twist
+    remap: cmd_vel
 ```
 
 의미는 아래와 같다.
 
 ```text
-31 /pinky1/command -> 32 /command
-32 /state          -> 31 /pinky1/state
+30 /pinky1/command      -> 31 /command
+31 /state               -> 30 /pinky1/state
+31 /follow_command      -> 30 /follow_command
+30 /pinky1/follow_event -> 31 /follow_event
+30 /pinky1/cmd_vel      -> 31 /cmd_vel
 ```
 
 bridge launch 사용법:
@@ -159,37 +204,50 @@ bridge launch 사용법:
 ```bash
 cd rmf_ws
 source ../pinky_drive_ws/install/setup.bash
+source ../jetcobot_ws/install/setup.bash
 source install/setup.bash
 
-ros2 launch pinky_rmf_adapter pinky_domain_bridges.launch.py
+ros2 launch pinky_fleet_adapter pinky_domain_bridges.launch.py
+ros2 launch jetcobot_workcell_adapter jetcobot_domain_bridges.launch.py
 ```
 
 개별 설정 파일로 직접 실행할 수도 있다.
 
 ```bash
 ros2 run domain_bridge domain_bridge \
-  src/pinky_rmf_adapter/config/pinky1_domain_bridge.yaml
+  src/pinky_fleet_adapter/config/pinky1_domain_bridge.yaml
 
 ros2 run domain_bridge domain_bridge \
-  src/pinky_rmf_adapter/config/pinky2_domain_bridge.yaml
+  src/pinky_fleet_adapter/config/pinky2_domain_bridge.yaml
+
+ros2 run domain_bridge domain_bridge \
+  src/jetcobot_workcell_adapter/config/jetcobot1_domain_bridge.yaml
 ```
 
 bridge 확인:
 
 ```bash
-ROS_DOMAIN_ID=31 ros2 topic list | grep pinky
-ROS_DOMAIN_ID=31 ros2 topic echo /pinky1/state
+ROS_DOMAIN_ID=30 ros2 topic list | grep pinky
+ROS_DOMAIN_ID=30 ros2 topic echo /pinky1/state
+ROS_DOMAIN_ID=30 ros2 topic list | grep jetcobot
+ROS_DOMAIN_ID=30 ros2 topic echo /jetcobot1/state
 ```
 
-`pinky_rmf_adapter`는 Open-RMF fleet adapter 역할을 맡고, `RobotClientAPI.py`는
+`pinky_fleet_adapter`는 Open-RMF fleet adapter 역할을 맡고, `RobotClientAPI.py`는
 RMF domain의 `/pinkyX/command` publisher와 `/pinkyX/state` subscriber를 사용해
-Pinky drive manager와 통신한다. `pinky_task_orchestrator`는 별도 패키지이며
-RMF task API service에 table collection/warehouse task를 제출한다.
+Pinky drive manager와 통신한다. `jetcobot_workcell_adapter`는 RMF domain의
+`/jetcobot1/command` publisher와 `/jetcobot1/state` subscriber를 사용해
+JetCobot arm manager와 통신한다. `task_orchestrator`는 별도 패키지이며
+RMF Task API topic에 table collection/warehouse task를 제출한다. warehouse task는
+`go_to_place(warehouse)` 뒤 `perform_action(wait_at_warehouse)`로 Pinky를 창고에
+대기시키고, 이 hold action이 시작되면 `/ingestor_requests`로 pick-and-place
+workcell request를 제출한다. workcell 결과가 오면 hold task를 해제하고 mission을
+완료 또는 수동개입 상태로 전환한다.
 
 RMF core만 실행하려면 아래 launch를 사용한다.
 
 ```bash
-ros2 launch pinky_rmf_bringup rmf_core.launch.py
+ros2 launch rmf_bringup rmf_core.launch.py
 ```
 
 이 launch가 기본으로 실행하는 노드는 아래와 같다.
@@ -204,28 +262,28 @@ fleet adapter만 실행하려면 아래 launch를 사용한다. 이 경우 RMF s
 이미 실행 중이어야 한다.
 
 ```bash
-ros2 launch pinky_rmf_adapter pinky_fleet_adapter.launch.py \
-  config_file:=$(ros2 pkg prefix pinky_rmf_adapter)/share/pinky_rmf_adapter/config/pinky_adapter.yaml \
-  nav_graph_file:=$(ros2 pkg prefix pinky_rmf_maps)/share/pinky_rmf_maps/nav_graphs/0.yaml
+ros2 launch pinky_fleet_adapter pinky_fleet_adapter.launch.py \
+  config_file:=$(ros2 pkg prefix pinky_fleet_adapter)/share/pinky_fleet_adapter/config/pinky_adapter.yaml \
+  nav_graph_file:=$(ros2 pkg prefix rmf_maps)/share/rmf_maps/nav_graphs/1.yaml
 ```
 
-통합 bringup launch는 RMF core를 먼저 띄운 뒤 adapter와 task orchestrator를 함께
-실행한다.
+통합 bringup launch는 RMF core를 먼저 띄운 뒤 fleet adapter, workcell adapter,
+task orchestrator를 함께 실행한다.
 
 ```bash
-ros2 launch pinky_rmf_bringup pinky_rmf.launch.py
+ros2 launch rmf_bringup rmf.launch.py
 ```
 
 이미 다른 launch에서 RMF core를 띄웠다면 core 포함을 끌 수 있다.
 
 ```bash
-ros2 launch pinky_rmf_bringup pinky_rmf.launch.py use_rmf_core:=false
+ros2 launch rmf_bringup rmf.launch.py use_rmf_core:=false
 ```
 
 개별 core 노드를 끄거나 adapter 시작 지연 시간을 조정할 수도 있다.
 
 ```bash
-ros2 launch pinky_rmf_bringup pinky_rmf.launch.py \
+ros2 launch rmf_bringup rmf.launch.py \
   use_building_map_server:=false \
   adapter_start_delay:=5.0
 ```
@@ -233,50 +291,85 @@ ros2 launch pinky_rmf_bringup pinky_rmf.launch.py \
 core만 통합 launch 안에서 확인하고 싶으면 adapter와 orchestrator를 끈다.
 
 ```bash
-ros2 launch pinky_rmf_bringup pinky_rmf.launch.py \
+ros2 launch rmf_bringup rmf.launch.py \
   use_fleet_adapter:=false \
+  use_workcell_adapter:=false \
   use_task_orchestrator:=false
 ```
 
 task orchestrator의 dispatch/task 상태 흐름을 자세히 보려면 debug 로그를 켠다.
 
 ```bash
-ros2 launch pinky_rmf_bringup pinky_rmf.launch.py \
+ros2 launch rmf_bringup rmf.launch.py \
   task_orchestrator_log_level:=debug
 ```
 
 ### Table Call Service
 
 task orchestrator는 단일 테이블 호출 입력으로 `/table_call` service를 제공한다.
-요청을 받으면 table collection RMF task를 `/submit_task`로 제출하고,
+요청을 받으면 table collection RMF task를 `task_api_requests`로 제출하고,
 응답으로 orchestrator가 만든 `mission_id`를 반환한다. `table_waypoint`를 비우면
 `table_id`와 같은 waypoint로 처리한다. `wait_seconds`가 `0`이면 orchestrator 기본
 대기 시간을 사용한다.
 
 ```bash
-ros2 service call /table_call pinky_task_msgs/srv/TableCall \
-  "{table_id: 'tent_1', table_waypoint: 'tent_1', wait_seconds: 20}"
+ros2 service call /table_call task_msgs/srv/TableCall \
+  "{table_id: 'table_1', table_waypoint: 'table_1', wait_seconds: 20}"
 ```
 
 기본 waypoint/default wait 설정을 쓰는 호출:
 
 ```bash
-ros2 service call /table_call pinky_task_msgs/srv/TableCall \
-  "{table_id: 'tent_1', table_waypoint: '', wait_seconds: 0}"
+ros2 service call /table_call task_msgs/srv/TableCall \
+  "{table_id: 'table_1', table_waypoint: '', wait_seconds: 0}"
 ```
 
 table collection task를 one-shot으로 직접 제출하려면 task orchestrator executable을 사용할 수 있다.
 
 ```bash
-ros2 run pinky_task_orchestrator pinky_task_orchestrator --table-waypoint tent_1
+ros2 run task_orchestrator task_orchestrator --table-waypoint table_1
 ```
 
 one-shot 실행에서 debug 로그를 보려면 ROS log level을 넘긴다.
 
 ```bash
-ros2 run pinky_task_orchestrator pinky_task_orchestrator \
-  --table-waypoint tent_1 \
-  --ros-args --log-level pinky_task_orchestrator:=debug
+ros2 run task_orchestrator task_orchestrator \
+  --table-waypoint table_1 \
+  --ros-args --log-level task_orchestrator:=debug
+```
+
+### Warehouse / Workcell Flow
+
+보관함이 full이면 orchestrator는 table task를 수행한 같은 로봇에게 warehouse
+`robot_task_request`를 보낸다. warehouse task는 아래 sequence로 만들어진다.
+
+```text
+go_to_place(warehouse)
+perform_action(wait_at_warehouse)
+```
+
+`wait_at_warehouse`는 Pinky가 workcell 작업 위치에서 떠나지 않도록 잡아두는 hold
+action이다. fleet adapter는 이 action이 시작될 때 `/task_events`에
+`event=started`, `activity_type=action`, `action_category=wait_at_warehouse`를
+publish한다. orchestrator는 이 이벤트를 warehouse 도착 신호로 보고
+`/ingestor_requests`에 pick-and-place request를 보낸다.
+
+workcell adapter는 `/ingestor_results`로 `ACKNOWLEDGED`, `SUCCESS`, `FAILED`를
+publish한다. `ACKNOWLEDGED`는 대기 상태를 유지하고, `SUCCESS`는 mission 완료,
+`FAILED`는 `intervention_required`로 전환한다. `SUCCESS` 또는 `FAILED` 같은 최종
+결과를 받으면 orchestrator는 warehouse hold RMF task에 `kill_task_request`를 보내
+hold를 해제한다. 이후 복귀는 `pinky_adapter.yaml`의 `finishing_request: park`에
+맡긴다.
+
+관련 설정은 `task_orchestrator/config/task_orchestrator.yaml`에 있다.
+
+```yaml
+task_event_topic: /task_events
+warehouse_waypoint: warehouse
+warehouse_hold_seconds: 10
+workcell_request_topic: /ingestor_requests
+workcell_result_topic: /ingestor_results
+workcell_target_guid: warehouse_pick_place_jetcobot1
 ```
 
 ### Follow Service
@@ -287,7 +380,7 @@ fleet adapter는 compose task의 `perform_action` category `follow`를
 `DriveCommand(command_type=follow)`로 변환해 Pinky drive manager에 전달한다.
 
 ```bash
-ros2 service call /follow_call pinky_task_msgs/srv/FollowCall \
+ros2 service call /follow_call task_msgs/srv/FollowCall \
   "{robot_name: 'pinky1'}"
 ```
 
@@ -298,15 +391,16 @@ ros2 topic echo /pinky1/state
 ```
 
 정상 수락되면 `state=following`, `last_command_status=accepted`가 publish된다.
-현재 follow 동작 자체는 Pinky drive manager의 follower/person-tracking 연동 지점에
-연결될 예정이다.
+Pinky drive manager는 Pinky domain 내부 `/follow_command`에
+`{"command": "start", "robot": "pinky1"}` 형태의 JSON 문자열을 publish하고,
+follower/person-tracking 노드는 이 topic을 구독해 추종을 시작한다.
 
 follow를 중단하려면 `/cancel_follow_call` service를 호출한다. orchestrator는
 `/follow_call`로 제출한 follow task의 RMF `task_id`를 로봇별로 추적하고,
-cancel 요청 시 RMF Task API에 `cancel_task_request`를 보낸다.
+cancel 요청 시 RMF Task API에 `kill_task_request`를 보낸다.
 
 ```bash
-ros2 service call /cancel_follow_call pinky_task_msgs/srv/CancelFollow \
+ros2 service call /cancel_follow_call task_msgs/srv/CancelFollow \
   "{robot_name: 'pinky1'}"
 ```
 

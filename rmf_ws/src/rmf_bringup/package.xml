@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>rmf_bringup</name>
+  <version>0.1.0</version>
+  <description>Bringup launch files for the RMF test deployment.</description>
+  <maintainer email="ane@example.com">ane</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>jetcobot_workcell_adapter</exec_depend>
+  <exec_depend>task_orchestrator</exec_depend>
+  <exec_depend>pinky_fleet_adapter</exec_depend>
+  <exec_depend>rmf_maps</exec_depend>
+  <exec_depend>rmf_building_map_tools</exec_depend>
+  <exec_depend>rmf_task_ros2</exec_depend>
+  <exec_depend>rmf_traffic_ros2</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

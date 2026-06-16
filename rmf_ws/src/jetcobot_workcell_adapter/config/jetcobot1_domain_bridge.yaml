@@ -1,0 +1,16 @@
+# RMF domain 30 <-> jetcobot1 local domain 33
+# RMF /jetcobot1/command -> jetcobot1 /command
+# jetcobot1 /state -> RMF /jetcobot1/state
+name: jetcobot1_domain_bridge
+from_domain: 30
+to_domain: 33
+
+topics:
+  jetcobot1/command:
+    type: jetcobot_msgs/msg/ArmCommand
+    remap: command
+
+  state:
+    type: jetcobot_msgs/msg/ArmState
+    remap: jetcobot1/state
+    reversed: true

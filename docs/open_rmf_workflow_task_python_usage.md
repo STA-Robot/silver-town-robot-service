@@ -33,7 +33,7 @@ RMF fleet adapter가 그 task를 `DriveCommand`로 변환하고, Pinky는 `Drive
 table call / UI / API
         |
         v
-pinky_task_orchestrator
+task_orchestrator
         |
         |  RMF task API
         v
@@ -41,7 +41,7 @@ Open-RMF dispatcher / task manager / traffic schedule
         |
         |  robot assignment + navigation/activity commands
         v
-pinky_rmf_adapter
+pinky_fleet_adapter
         |
         |  DriveCommand / DriveState
         v
@@ -49,7 +49,7 @@ Pinky drive manager / Nav2
 ```
 
 ```
-pinky_task_orchestrator
+task_orchestrator
         |
         |  workcell/ingestor status + result coordination
         v
@@ -63,7 +63,7 @@ fixed loading robot arm
 역할 분리는 명확히 둔다.
 
 - Open-RMF: 로봇 선택, traffic schedule, task 실행, parking 복귀
-- `pinky_task_orchestrator`: 업무 workflow, 분기, 같은 로봇 유지, 로봇팔 workcell 결과 조정
+- `task_orchestrator`: 업무 workflow, 분기, 같은 로봇 유지, 로봇팔 workcell 결과 조정
 - Pinky adapter: RMF task 실행 요청을 Pinky의 `DriveCommand`로 변환
 - Pinky drive manager: `navigate`, `returning`, `stop` 등 실제 주행 명령 수행
 
@@ -100,8 +100,10 @@ table_call_received
   -> wait_until_table_task_completed
   -> check_storage
   -> submit_warehouse_task_to_same_robot
-  -> wait_until_warehouse_task_completed
+  -> wait_until_warehouse_hold_started
+  -> submit_pick_place_workcell_request
   -> wait_until_robot_arm_workcell_completed
+  -> release_warehouse_hold
   -> complete_mission
   -> RMF finishing_request: park
 ```
@@ -111,7 +113,12 @@ table_call_received
 - table task를 수행한 로봇 이름을 `assigned_robot`으로 저장한다.
 - 보관함이 가득 찼으면 warehouse task는 반드시 같은 로봇에게 direct task로 보낸다.
 - table task 완료 직후 RMF가 잠깐 `finishing_request: park`를 시작할 수 있지만, warehouse direct task가 같은 로봇에게 들어오면 복귀보다 새 업무가 우선되어야 한다.
+- warehouse task는 `go_to_place(warehouse) + perform_action(wait_at_warehouse)`로
+  구성한다. `wait_at_warehouse`가 시작되면 Pinky가 창고에 도착해 hold 중이라는
+  뜻이므로 orchestrator가 workcell request를 제출한다.
 - 창고 도착 후 로봇팔 작업은 `robot_arm_ingestor_adapter` 같은 workcell adapter를 통해 수행한다.
+- workcell 최종 결과(`SUCCESS`/`FAILED`)를 받으면 orchestrator가 warehouse hold
+  task에 `kill_task_request`를 보내 hold를 해제한다.
 - workcell 성공 후 mission이 완료되면 RMF의 `finishing_request: park`가 복귀를 수행한다.
 
 ## Task 단위
@@ -151,11 +158,15 @@ description:
 category: compose
 description:
   phases:
-    - go_to_place(warehouse waypoint)
+    - sequence:
+        - go_to_place(warehouse waypoint)
+        - perform_action(wait_at_warehouse)
 ```
 
 이 task는 robot direct request로 제출한다. `assigned_robot`을 명시해서 table
 task를 수행한 로봇과 warehouse task를 수행하는 로봇이 달라지지 않도록 한다.
+`wait_at_warehouse`는 workcell pick/place가 끝날 때까지 Pinky를 warehouse에
+대기시키는 hold action이다.
 
 ### Task 3: Parking Return / Idle Behavior
 
@@ -215,8 +226,10 @@ Result:
   message: string
 ```
 
-orchestrator는 warehouse 도착 후 workcell result를 기다린다. 성공하면 mission을
-완료하고, 이후 복귀는 RMF `finishing_request: park`에 맡긴다.
+orchestrator는 `wait_at_warehouse` hold action이 시작되면 workcell request를
+보내고 workcell result를 기다린다. 최종 결과를 받으면 warehouse hold task를
+해제한다. 성공하면 mission을 완료하고, 이후 복귀는 RMF `finishing_request: park`에
+맡긴다.
 
 ## RMF Task JSON 설계
 
@@ -266,18 +279,17 @@ def build_table_collection_task(
             ],
         },
         "labels": [mission_id, "table_collection", table_waypoint],
-        "requester": "pinky_task_orchestrator",
+        "requester": "task_orchestrator",
         "fleet_name": "pinky",
     }
 ```
 
 주의할 점:
 
-- `perform_action`의 `category` 값인 `wait_at_table`은 fleet adapter가 수행 가능한
-  action으로 등록해야 한다.
-- 현재 adapter의 `execute_action()`은 비어 있으므로, 실제 구현 단계에서는
-  `wait_at_table`을 처리하고 시간이 지나면 `execution.finished()`를 호출하도록
-  adapter를 확장해야 한다.
+- `perform_action`의 `category` 값인 `wait_at_table`, `wait_at_warehouse`는 fleet
+  adapter가 수행 가능한 action으로 등록해야 한다.
+- `wait_at_table`은 table collection 대기용이고, `wait_at_warehouse`는 workcell
+  pick/place가 끝날 때까지 Pinky를 warehouse에 붙잡아두는 hold action이다.
 
 ### Robot direct request: Warehouse Move
 
@@ -285,23 +297,39 @@ def build_table_collection_task(
 def build_warehouse_move_task(
     mission_id: str,
     warehouse_waypoint: str,
+    hold_seconds: int,
 ) -> dict:
+    activities = [
+        {"category": "go_to_place", "description": warehouse_waypoint},
+        {
+            "category": "perform_action",
+            "description": {
+                "category": "wait_at_warehouse",
+                "description": {
+                    "mission_id": mission_id,
+                    "table": warehouse_waypoint,
+                    "seconds": hold_seconds,
+                },
+                "unix_millis_action_duration_estimate": hold_seconds * 1000,
+            },
+        },
+    ]
     return {
         "category": "compose",
         "description": {
             "category": "warehouse_move",
-            "detail": f"Move assigned robot to {warehouse_waypoint}",
+            "detail": f"Move assigned robot to {warehouse_waypoint} and hold",
             "phases": [
                 {
                     "activity": {
-                        "category": "go_to_place",
-                        "description": warehouse_waypoint,
+                        "category": "sequence",
+                        "description": {"activities": activities},
                     }
                 }
             ],
         },
         "labels": [mission_id, "warehouse_move", warehouse_waypoint],
-        "requester": "pinky_task_orchestrator",
+        "requester": "task_orchestrator",
         "fleet_name": "pinky",
     }
 ```
@@ -335,7 +363,7 @@ Jazzy 스키마에는 `dispatch_task_request`와 `robot_task_request`가 모두 
 - mission 완료 후 복귀는 `finishing_request: park`에 맡기므로 별도 return task를 제출하지 않는다.
 - `compose`, `go_to_place`, `perform_action` 스키마를 사용해 이동과 대기/작업을 묶는다.
 
-별도 `pinky_task_orchestrator` 노드에서 가장 깔끔한 방식은 RMF task API service에
+별도 `task_orchestrator` 노드에서 가장 깔끔한 방식은 RMF task API service에
 JSON request를 보내는 것이다.
 
 ```python
@@ -350,7 +378,7 @@ from rmf_task_msgs.srv import ApiService
 
 class RmfTaskApiClient(Node):
     def __init__(self):
-        super().__init__("pinky_task_orchestrator")
+        super().__init__("task_orchestrator")
         # 실제 service 이름은 배포 launch에서 확인한다.
         # 일반적으로 rmf_task_msgs/srv/ApiService 타입의 task API service를 사용한다.
         self.api = self.create_client(ApiService, "/task_api_service")
@@ -447,7 +475,7 @@ from rmf_task_msgs.msg import ApiRequest, ApiResponse
 
 class RmfTaskTopicClient(Node):
     def __init__(self):
-        super().__init__("pinky_task_orchestrator")
+        super().__init__("task_orchestrator")
         self.pending = {}
         self.request_pub = self.create_publisher(
             ApiRequest,
@@ -554,7 +582,7 @@ class LegacySubmitTaskClient(Node):
 
     def submit_station_task(self, place_name: str):
         req = SubmitTask.Request()
-        req.requester = "pinky_task_orchestrator"
+        req.requester = "task_orchestrator"
 
         req.description = TaskDescription()
         req.description.start_time = self.get_clock().now().to_msg()
@@ -593,7 +621,7 @@ from rmf_task_msgs.msg import TaskSummary, DispatchStates
 
 class MissionTracker(Node):
     def __init__(self):
-        super().__init__("pinky_mission_tracker")
+        super().__init__("mission_tracker")
         self.missions_by_task_id = {}
         self.task_summary_sub = self.create_subscription(
             TaskSummary,
@@ -641,10 +669,10 @@ class MissionTracker(Node):
 
 ## Orchestrator 메서드 설계
 
-실제 `pinky_task_orchestrator`는 아래 정도의 public method를 가지면 충분하다.
+실제 `task_orchestrator`는 아래 정도의 public method를 가지면 충분하다.
 
 ```python
-class PinkyTaskOrchestrator(Node):
+class TaskOrchestrator(Node):
     def on_table_call(self, table_id: str) -> str:
         """table call을 mission으로 만들고 table collection task를 제출한다."""
 
@@ -657,11 +685,11 @@ class PinkyTaskOrchestrator(Node):
     def submit_warehouse_task(self, mission) -> None:
         """assigned_robot에게 warehouse direct task를 제출한다."""
 
-    def on_warehouse_task_completed(self, mission) -> None:
-        """robot-arm workcell/ingestor 완료를 기다린다."""
+    def on_warehouse_hold_started(self, mission) -> None:
+        """warehouse hold 시작 후 workcell/ingestor request를 제출한다."""
 
     def on_workcell_done(self, mission, success: bool, message: str) -> None:
-        """mission 완료 또는 intervention_required를 결정한다."""
+        """warehouse hold를 해제하고 mission 완료 또는 intervention_required를 결정한다."""
 ```
 
 mission 데이터는 최소한 아래 필드를 가진다.
@@ -683,8 +711,9 @@ class Mission:
 
 ## Adapter 쪽 추가 요구사항
 
-compose task 안에서 `perform_action(wait_at_table)`을 쓰려면 fleet adapter가 해당
-action을 받아야 한다.
+compose task 안에서 `perform_action(wait_at_table)` 또는
+`perform_action(wait_at_warehouse)`를 쓰려면 fleet adapter가 해당 action을 받아야
+한다.
 
 현재 `pinky_fleet_adapter.py`에는 아래 callback이 이미 연결되어 있다.
 
@@ -698,7 +727,7 @@ lambda category, description, execution: self.execute_action(
 
 ```python
 def execute_action(self, category: str, description: dict, execution):
-    if category == "wait_at_table":
+    if category in {"wait_at_table", "wait_at_warehouse"}:
         seconds = float(description.get("seconds", 0.0))
         # timer 또는 thread로 seconds만큼 기다린 뒤 execution.finished() 호출
         return
@@ -706,12 +735,14 @@ def execute_action(self, category: str, description: dict, execution):
     # 모르는 action이면 실패 처리 또는 경고 후 replan 정책 적용
 ```
 
-그리고 fleet handle에는 `wait_at_table`이 performable action임을 등록해야 한다.
+그리고 fleet handle에는 `wait_at_table`, `wait_at_warehouse`가 performable action임을
+등록해야 한다.
 Python binding의 정확한 이름은 설치된 RMF 버전에 맞춰 확인해야 하지만, C++ API
 기준 개념은 다음과 같다.
 
 ```python
 fleet_handle.add_performable_action("wait_at_table", consider_callback)
+fleet_handle.add_performable_action("wait_at_warehouse", consider_callback)
 fleet_handle.consider_composed_requests(consider_callback)
 ```
 
@@ -719,14 +750,15 @@ fleet_handle.consider_composed_requests(consider_callback)
 
 이 프로젝트에서는 다음 순서로 구현하는 것을 권장한다.
 
-1. `pinky_task_orchestrator`를 별도 Python ROS 2 노드로 만든다.
+1. `task_orchestrator`를 별도 Python ROS 2 노드로 만든다.
 2. RMF task 제출은 JSON API service 또는 topic을 사용한다.
 3. table task는 `compose`: `go_to_place + perform_action(wait_at_table)`로 만든다.
 4. storage full이면 warehouse task를 `robot_task_request`로 같은 로봇에게 보낸다.
-5. warehouse 도착 후 로봇팔은 workcell/ingestor adapter를 통해 정리 작업을 수행한다.
-6. workcell 성공 후 orchestrator는 mission을 완료한다.
-7. 복귀는 `finishing_request: park`에 맡겨 returning robot도 새 table call dispatch 후보가 되도록 한다.
-8. storage full 직후 잠깐 시작된 returning은 warehouse direct task로 대체될 수 있어야 한다.
+5. warehouse task는 `go_to_place + perform_action(wait_at_warehouse)`로 Pinky를 창고에 hold한다.
+6. `wait_at_warehouse` 시작 이벤트를 받으면 workcell/ingestor adapter에 pick/place request를 보낸다.
+7. workcell 최종 결과 후 orchestrator는 warehouse hold를 해제하고 mission을 완료 또는 수동개입 상태로 전환한다.
+8. 복귀는 `finishing_request: park`에 맡겨 returning robot도 새 table call dispatch 후보가 되도록 한다.
+9. storage full 직후 잠깐 시작된 returning은 warehouse direct task로 대체될 수 있어야 한다.
 
 ## 참고
 
