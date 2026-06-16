@@ -1,5 +1,0 @@
-follower_node:
-  ros__parameters:
-    robot_name: "pinky2"
-    robot_ip: "192.168.4.1"
-    robot_port: 9998

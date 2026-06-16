@@ -1,0 +1,9 @@
+<?xml version='1.0' ?>
+
+<launch>
+
+    <node pkg="client_monitor" exec="main" name="table_ui" output="screen">
+        <param from="config/table_config.yaml"/>
+    </node>
+
+</launch>
