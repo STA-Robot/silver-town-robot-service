@@ -84,8 +84,14 @@ RMF domain에서는 domain bridge가 로봇별 topic으로 remap한다.
 ```text
 RMF domain 30:     /pinky1/command  ->  pinky1 domain 31: /command
 RMF domain 30:     /pinky1/state    <-  pinky1 domain 31: /state
+RMF domain 30:     /follow_command  <-  pinky1 domain 31: /follow_command
+RMF domain 30:     /pinky1/follow_event -> pinky1 domain 31: /follow_event
+RMF domain 30:     /pinky1/cmd_vel       -> pinky1 domain 31: /cmd_vel
 RMF domain 30:     /pinky2/command  ->  pinky2 domain 32: /command
 RMF domain 30:     /pinky2/state    <-  pinky2 domain 32: /state
+RMF domain 30:     /follow_command  <-  pinky2 domain 32: /follow_command
+RMF domain 30:     /pinky2/follow_event -> pinky2 domain 32: /follow_event
+RMF domain 30:     /pinky2/cmd_vel       -> pinky2 domain 32: /cmd_vel
 ```
 
 Nav2와 TF가 준비되어 있는지 Pinky domain에서 확인한다.
@@ -258,8 +264,14 @@ domain bridge remap을 통해 로봇별 topic으로 보이게 한다.
 |---|---|---|
 | `/pinky1/command` | `/command` | `pinky_drive_msgs/msg/DriveCommand` |
 | `/pinky1/state` | `/state` | `pinky_drive_msgs/msg/DriveState` |
+| `/follow_command` | `/follow_command` | `std_msgs/msg/String` |
+| `/pinky1/follow_event` | `/follow_event` | `std_msgs/msg/String` |
+| `/pinky1/cmd_vel` | `/cmd_vel` | `geometry_msgs/msg/Twist` |
 | `/pinky2/command` | `/command` | `pinky_drive_msgs/msg/DriveCommand` |
 | `/pinky2/state` | `/state` | `pinky_drive_msgs/msg/DriveState` |
+| `/follow_command` | `/follow_command` | `std_msgs/msg/String` |
+| `/pinky2/follow_event` | `/follow_event` | `std_msgs/msg/String` |
+| `/pinky2/cmd_vel` | `/cmd_vel` | `geometry_msgs/msg/Twist` |
 
 자세한 계약은 [docs/rmf_pinky_drive_interface.md](../docs/rmf_pinky_drive_interface.md)를
 참고한다.

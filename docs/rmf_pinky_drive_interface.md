@@ -24,6 +24,9 @@ Pinky domain 내부 topic:
 |---|---|---|
 | `/command` | RMF -> Pinky | `pinky_drive_msgs/msg/DriveCommand` |
 | `/state` | Pinky -> RMF | `pinky_drive_msgs/msg/DriveState` |
+| `/follow_command` | Pinky -> RMF | `std_msgs/msg/String` |
+| `/follow_event` | RMF -> Pinky | `std_msgs/msg/String` |
+| `/cmd_vel` | RMF -> Pinky | `geometry_msgs/msg/Twist` |
 
 RMF domain에서는 로봇별 topic으로 bridge한다.
 
@@ -39,8 +42,14 @@ RMF domain에서는 로봇별 topic으로 bridge한다.
 |---|---|
 | `/pinky1/command` | pinky1 domain `/command` |
 | `/pinky1/state` | pinky1 domain `/state` |
+| `/follow_command` | pinky1 domain `/follow_command` |
+| `/pinky1/follow_event` | pinky1 domain `/follow_event` |
+| `/pinky1/cmd_vel` | pinky1 domain `/cmd_vel` |
 | `/pinky2/command` | pinky2 domain `/command` |
 | `/pinky2/state` | pinky2 domain `/state` |
+| `/follow_command` | pinky2 domain `/follow_command` |
+| `/pinky2/follow_event` | pinky2 domain `/follow_event` |
+| `/pinky2/cmd_vel` | pinky2 domain `/cmd_vel` |
 
 ## DriveCommand
 

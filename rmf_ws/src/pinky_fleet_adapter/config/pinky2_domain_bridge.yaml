@@ -1,6 +1,9 @@
 # RMF domain 30 <-> pinky2 local domain 32
 # RMF /pinky2/command -> pinky2 /command
 # pinky2 /state -> RMF /pinky2/state
+# pinky2 /follow_command -> RMF /follow_command
+# RMF /pinky2/follow_event -> pinky2 /follow_event
+# RMF /pinky2/cmd_vel -> pinky2 /cmd_vel
 name: pinky2_domain_bridge
 from_domain: 30
 to_domain: 32
@@ -14,3 +17,16 @@ topics:
     type: pinky_drive_msgs/msg/DriveState
     remap: pinky2/state
     reversed: true
+
+  follow_command:
+    type: std_msgs/msg/String
+    remap: follow_command
+    reversed: true
+
+  pinky2/follow_event:
+    type: std_msgs/msg/String
+    remap: follow_event
+
+  pinky2/cmd_vel:
+    type: geometry_msgs/msg/Twist
+    remap: cmd_vel

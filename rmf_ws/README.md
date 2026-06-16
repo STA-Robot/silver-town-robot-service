@@ -142,8 +142,8 @@ source install/setup.bash
 | 대상 | ROS_DOMAIN_ID | local topic | RMF domain topic |
 |---|---:|---|---|
 | Open-RMF, task_orchestrator, adapters | 30 | - | - |
-| pinky1 | 31 | `/command`, `/state` | `/pinky1/command`, `/pinky1/state` |
-| pinky2 | 32 | `/command`, `/state` | `/pinky2/command`, `/pinky2/state` |
+| pinky1 | 31 | `/command`, `/state`, `/follow_command`, `/follow_event`, `/cmd_vel` | `/pinky1/command`, `/pinky1/state`, `/follow_command`, `/pinky1/follow_event`, `/pinky1/cmd_vel` |
+| pinky2 | 32 | `/command`, `/state`, `/follow_command`, `/follow_event`, `/cmd_vel` | `/pinky2/command`, `/pinky2/state`, `/follow_command`, `/pinky2/follow_event`, `/pinky2/cmd_vel` |
 | jetcobot1 | 33 | `/command`, `/state` | `/jetcobot1/command`, `/jetcobot1/state` |
 
 Pinky bridge 설정 파일은 `pinky_fleet_adapter/config`에 있다.
@@ -174,13 +174,29 @@ topics:
     type: pinky_drive_msgs/msg/DriveState
     remap: pinky1/state
     reversed: true
+
+  follow_command:
+    type: std_msgs/msg/String
+    remap: follow_command
+    reversed: true
+
+  pinky1/follow_event:
+    type: std_msgs/msg/String
+    remap: follow_event
+
+  pinky1/cmd_vel:
+    type: geometry_msgs/msg/Twist
+    remap: cmd_vel
 ```
 
 의미는 아래와 같다.
 
 ```text
-30 /pinky1/command -> 31 /command
-31 /state          -> 30 /pinky1/state
+30 /pinky1/command      -> 31 /command
+31 /state               -> 30 /pinky1/state
+31 /follow_command      -> 30 /follow_command
+30 /pinky1/follow_event -> 31 /follow_event
+30 /pinky1/cmd_vel      -> 31 /cmd_vel
 ```
 
 bridge launch 사용법:
