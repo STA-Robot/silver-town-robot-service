@@ -119,7 +119,7 @@ class VideoReceiverNode(Node):
     def _on_follow_command(self, msg: String):
         try:
             data       = json.loads(msg.data)
-            robot_name = data["robot_name"]
+            robot_name = data["robot"]
             command    = data["command"]  # "start" | "stop"
 
             if robot_name not in self.robots:
