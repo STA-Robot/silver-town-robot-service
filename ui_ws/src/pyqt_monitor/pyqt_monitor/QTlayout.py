@@ -19,7 +19,7 @@ from .robotStateSubscriber import RobotStateSubscriber
 
 # ── 추가 import ──────────────────────────────────────────────────
 from .mapWidget import MapWidget
-from .robotPoseSubscriber import RobotPoseSubscriber
+from .robotPoseNode import PoseNode
 # ────────────────────────────────────────────────────────────────
 common_path = get_package_share_directory('visionDataHub')
 config_path = os.path.join(common_path, 'config', 'video_config.yaml')
@@ -281,7 +281,10 @@ class ControlUI(QWidget):
 
     def _on_robot_pose(self, robot_name: str,
                        world_x: float, world_y: float, yaw: float):
-        self.map_widget.update_pose(robot_name, world_x, world_y, yaw)
+        if x is None:
+            self.map_widget.clear_pose(robot_name)
+        else:
+            self.map_widget.update_pose(robot_name, x, y, yaw)
 
     # ── 이벤트 로그 ───────────────────────────────────────────
 
