@@ -15,7 +15,7 @@ from std_msgs.msg import String
 from .stateController import StateController, State, Event
 from ai_controller.aicore.gestureRecognizer import get_gesture
 from ai_controller.aicore.targetTracker import get_person_target, tracker as global_tracker
-from .dbg_data import _publish_inference
+from .visualizer import draw as draw_visualizer
 
 
 
@@ -59,11 +59,8 @@ class AIControllerNode(Node):
         self._image_subs[robot_name] = sub
 
          # 디버그 발행 (GUI용)
-        for robot_name in self._image_subs:
-            if robot_name is not self._image_subs:
-                return
-            topic = f'/{robot_name}/ai_debug'
-            self.result_pub = self.create_publisher(String,topic, 10)
+        topic = f'/{robot_name}/result/compressed'
+        self.result_pub = self.create_publisher(CompressedImage,topic, 10)
 
         self.get_logger().info(f"[AI] 구독 등록: {topic}")    
 
@@ -144,12 +141,28 @@ class AIControllerNode(Node):
                     self._follower_node.on_udp_message(robot_name, cmd)
 
         # ── 디버그 발행 (구독자 있을 때만) ────────────────────
-        # result_pub 구독자 체크를 cmd 처리 이후로 이동 (순서 버그 수정)
-        if self.result_pub.get_subscription_count() == 0:
+        pub = self.result_pubs.get(robot_name)
+        if pub is None or pub.get_subscription_count() == 0:
             return
-        if t_dbg is not None:
-            buf = _publish_inference(robot_name, t_dbg, g_dbg)
-            self.result_pub.publish(buf)
+                
+        annotated = draw_visualizer(
+            frame.copy(),       # 원본 frame 보존
+            self.fsm.state,
+            g_dbg,
+            t_dbg
+        )
+
+        # annotated numpy → JPEG bytes → CompressedImage
+        ok, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            return
+
+        result_msg             = CompressedImage()
+        result_msg.header.stamp = self.get_clock().now().to_msg()
+        result_msg.format      = "jpeg"
+        result_msg.data        = buf.tobytes()
+        pub.publish(result_msg)
+        
 
 def main(args=None):
     rclpy.init(args=args)
@@ -158,7 +171,7 @@ def main(args=None):
 
     ai_node     = AIControllerNode()
     follow_node = FollowerNode(
-        on_end_callback=lambda robot_name: ai_node.stop_inference()
+        on_end_callback=lambda robot_name: ai_node._stop_inference()
     )
     ai_node.set_follower(follow_node)
 
