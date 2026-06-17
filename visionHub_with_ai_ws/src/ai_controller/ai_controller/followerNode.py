@@ -106,8 +106,8 @@ class FollowerNode(Node):
             msg.data = reason   # "done" | "stop"
             pub_event.publish(msg)  # /pinky1/follow_event
 
-        if self._on_end_callback is not None:
-            self._on_end_callback(robot_name)
+        # if self._on_end_callback is not None:
+        #     self._on_end_callback(robot_name)
 
         self.get_logger().info(f"[FollowerNode] {robot_name} END ({reason})")
 

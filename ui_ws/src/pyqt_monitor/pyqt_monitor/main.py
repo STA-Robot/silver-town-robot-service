@@ -12,30 +12,27 @@ from pyqt_monitor.QTlayout import ControlUI
 def main():
     rclpy.init()
 
-    app    = QApplication(sys.argv)
+    app = QApplication(sys.argv)
     window = ControlUI()
     window.show()
 
-    # ViewerController 안의 ROS 노드만 spin
-    spin_thread_Viewer = threading.Thread(
-        target=rclpy.spin,
-        args=(window.viewer_ctrl.get_ros_node(),),
-        daemon=True
-    )
-    spin_thread_Viewer.start()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(window.viewer_ctrl.get_ros_node())
+    executor.add_node(window.state_sub.get_ros_node())
 
-    pin_thread_state = threading.Thread(
-        target=rclpy.spin,
-        args=(window.state_sub.get_ros_node(),),
+    spin_thread = threading.Thread(
+        target=executor.spin,
         daemon=True
     )
-    pin_thread_state.start()
+    spin_thread.start()
 
     exit_code = app.exec_()
 
+    executor.shutdown()
     window.viewer_ctrl.ros.destroy_node()
     window.state_sub.destroy()
     rclpy.shutdown()
+
     sys.exit(exit_code)
 
 

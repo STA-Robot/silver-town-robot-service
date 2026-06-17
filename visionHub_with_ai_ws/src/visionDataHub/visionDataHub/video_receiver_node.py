@@ -108,7 +108,8 @@ class VideoReceiverNode(Node):
             elif action == "off":
                 self._gui_active.discard(robot_name)
                 self._unsubscribe_result(robot_name)
-                self._result_cache.pop(robot_name, None)#?
+                with self.lock:
+                    self._result_cache.pop(robot_name, None)
                 self.get_logger().info(f"[Viewer] {robot_name} 비활성화")
         except Exception as e:
             self.get_logger().warn(f"[viewer_request 파싱 오류] {e}")
@@ -137,14 +138,18 @@ class VideoReceiverNode(Node):
 
     def _make_follow_event_cb(self, robot_name: str):
         def cb(msg: String):
-            if msg.data in ("done", "stop"):
-                self._follow_active.discard(robot_name)
+            if msg.data not in ("done", "stop"):
+                return
+            self._follow_active.discard(robot_name)
+            with self.lock:
                 self._result_cache.pop(robot_name, None)
-            # view 중인 로봇이면 raw로 전환
-                if robot_name in self._gui_active:
-                    self._unsubscribe_result(robot_name)
-                self.get_logger().info(f"[Follow] {robot_name} follow 중단")
-        return cb     
+            # view 중이면 result 구독 해제 → raw로 자동 전환
+            if robot_name in self._gui_active:
+                self._unsubscribe_result(robot_name)
+                self.get_logger().info(f"[Follow] {robot_name} 종료 → raw 전환")
+            else:
+                self.get_logger().info(f"[Follow] {robot_name} 종료")
+        return cb
 
      # ── result 구독/해제 ──────────────────────────────────────
 
@@ -190,13 +195,17 @@ class VideoReceiverNode(Node):
         with self.lock:
             result_frame = self._result_cache.get(robot_name)
 
-        data = result_frame if (robot_name in self._follow_active and result_frame) else jpeg
+        use_result = (robot_name in self._follow_active) and (result_frame is not None)
+        payload    = result_frame if use_result else jpeg
 
         ros_msg = CompressedImage()
         ros_msg.header.stamp = self.get_clock().now().to_msg()
         ros_msg.format = "jpeg"
-        ros_msg.data   = data
+        ros_msg.data   = payload
         pub.publish(ros_msg)
+        self.get_logger().debug(
+            f"[Viewer] {robot_name} → {'result' if use_result else 'raw'}"
+        )
 
     # ── UDP 수신 루프 ─────────────────────────────────────────
 
@@ -211,7 +220,7 @@ class VideoReceiverNode(Node):
                 data, addr = sock.recvfrom(65507)
                 robot_ip   = addr[0]
 
-                if b"|" not in data[:20]:
+                if b"|" not in data[:64]:
                     continue
 
                 header, jpeg = data.split(b"|", 1) #jpeg에 | 포함되면 깨짐
@@ -237,18 +246,7 @@ class VideoReceiverNode(Node):
                     self._publish_status(robot_name, robot_ip, True)
                     self.get_logger().info(f"[IP변경] {robot_name} {prev_ip} → {robot_ip}")
 
-                # ── 발행 게이트 판단 ──────────────────────────
-                if not self._should_publish(robot_name):
-                    continue
-
-                pub = self.image_pubs.get(robot_name)
-                if pub is None:
-                    continue
-
-                # 구독자 없으면 발행 스킵 (대역폭 절약)
-                if pub.get_subscription_count() == 0:
-                    continue
-
+   
                 # AI용 raw 발행 (follow_active 로봇만)
                 if robot_name in self._follow_active:
                     pub = self.image_pubs.get(robot_name)
