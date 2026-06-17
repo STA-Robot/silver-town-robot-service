@@ -275,6 +275,7 @@ class ControlUI(QWidget):
         if item is None:
             return
         item.update_state(state, battery, available, emergency)
+        self.get_logger().info(f"[_on_robot_state] {state},{battery}")
 
     # ── 로봇 pose 수신 → MapWidget 업데이트 ──────────────────
     #   RobotPoseSubscriber.pose_received 시그널 수신

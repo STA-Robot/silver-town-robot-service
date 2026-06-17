@@ -18,23 +18,22 @@ class RobotStateNode(Node):
 
         self._on_state_cb = on_state_cb
 
-        # 각 로봇별 토픽 구독
         for robot in robot_configs:
             robot_name = robot["robot_name"]
-            #topic      = f'/{robot_name}/state'
-            topic      = f'/state'
+            topic = f'/{robot_name}/state'
 
-            self.create_subscription(
+            sub = self.create_subscription(
                 DriveState,
                 topic,
-                lambda msg, rn=robot_name: self._on_state(msg, rn),
+                self._on_state,
                 10
             )
             self.get_logger().info(f"[RobotState] 구독: {topic}")
+       
 
-    def _on_state(self, msg: DriveState, robot_name: str):
+    def _on_state(self, msg: DriveState):
         self._on_state_cb(
-            robot_name=robot_name,
+            robot_name=msg.robot_name,
             state=msg.state,
             battery=msg.battery_soc,
             available=msg.available,
@@ -80,6 +79,7 @@ class RobotStateSubscriber(QObject):
             available,
             emergency
         )
+        self.get_logger().info(f"[_on_state_cb] {state},{battery}")
 
     def get_ros_node(self) -> RobotStateNode:
         return self.ros
