@@ -79,8 +79,7 @@ class RobotStateSubscriber(QObject):
             available,
             emergency
         )
-        self.get_logger().info(f"[_on_state_cb] {state},{battery}")
-
+ 
     def get_ros_node(self) -> RobotStateNode:
         return self.ros
 

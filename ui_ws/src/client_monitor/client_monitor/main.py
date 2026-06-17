@@ -1,29 +1,41 @@
 import sys
+import threading
 import rclpy
 from PyQt5.QtWidgets import QApplication
-from ui_ws.src.client_monitor.client_monitor.table_call_client import TableCallClient
-from ui_ws.src.client_monitor.client_monitor.tableOrderwidget import TableOrderWidget
+
+from client_monitor.tableOrderwidget import TableOrderWidget
+from client_monitor.followOrderwidget import FollowOrderwidget
 
 
 def main():
     # ROS 시작
     rclpy.init()
 
-    # PyQt 시작
     app = QApplication(sys.argv)
+    t_window = TableOrderWidget()
+    t_window.show()
 
-    # ROS 노드 생성
-    ros_node = TableCallClient()
+    f_window = FollowOrderwidget()
+    f_window.show()
 
-    # UI 생성 (Node 주입)
-    window = TableOrderWidget(ros_node)
-    window.show()
+
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(t_window.table_call_node)
+    executor.add_node(f_window.follow_call_node)
+
+    spin_thread = threading.Thread(
+        target=executor.spin,
+        daemon=True
+    )
+    spin_thread.start()
 
     # UI 실행
     exit_code = app.exec_()
 
     # 종료 처리
-    ros_node.destroy_node()
+    executor.shutdown()
+    t_window.table_call_node.destroy_node()
+    f_window.follow_call_node.destroy_node()
     rclpy.shutdown()
 
     sys.exit(exit_code)
