@@ -16,10 +16,8 @@ from PyQt5.QtCore import Qt
 
 from .ViewerController import ViewerController
 from .robotStateSubscriber import RobotStateSubscriber
-
-# ── 추가 import ──────────────────────────────────────────────────
 from .mapWidget import MapWidget
-from .robotPoseNode import PoseNode
+
 # ────────────────────────────────────────────────────────────────
 common_path = get_package_share_directory('visionDataHub')
 config_path = os.path.join(common_path, 'config', 'video_config.yaml')
@@ -139,7 +137,7 @@ class ControlUI(QWidget):
         self.map_layout.addWidget(map_title)
         self.map_layout.addWidget(self.map_widget)   # ← MapWidget
         self.map_frame.setLayout(self.map_layout)
-
+      
         # ── EVENT LOG ─────────────────────────────────────────
         self.event_frame  = QFrame()
         self.event_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
@@ -167,11 +165,7 @@ class ControlUI(QWidget):
         self.viewer_ctrl  = ViewerController(self)
         self.state_sub    = RobotStateSubscriber(self)
 
-        # ── RobotPoseSubscriber 생성 ──────────────────────────
-        # self.pose_sub = RobotPoseSubscriber(robot_names, self)
-        # self.pose_sub.pose_received.connect(self._on_robot_pose)
-        # ─────────────────────────────────────────────────────
-
+ 
         self.robot_frame  = QFrame()
         self.robot_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
         self.robot_layout = QVBoxLayout()
@@ -276,16 +270,6 @@ class ControlUI(QWidget):
             return
         item.update_state(state, battery, available, emergency)
     
-
-    # ── 로봇 pose 수신 → MapWidget 업데이트 ──────────────────
-    #   RobotPoseSubscriber.pose_received 시그널 수신
-
-    def _on_robot_pose(self, robot_name: str,
-                       world_x: float, world_y: float, yaw: float):
-        if x is None:
-            self.map_widget.clear_pose(robot_name)
-        else:
-            self.map_widget.update_pose(robot_name, x, y, yaw)
 
     # ── 이벤트 로그 ───────────────────────────────────────────
 
