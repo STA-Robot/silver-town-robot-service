@@ -12,6 +12,7 @@
     <!-- AIController -->
     <node pkg="ai_controller" exec="aiControllerNode" output="screen"/>
 
+
     <!-- PyQt Monitor — Qt 환경변수 추가 -->
     <node pkg="pyqt_monitor" exec="pyqt_monitor" output="screen">
         <env name="QT_QPA_PLATFORM_PLUGIN_PATH" value=""/>

@@ -1,16 +1,3 @@
-"""
-MapWidget.py
-────────────
-SLAM map 이미지(.pgm) 위에 각 로봇의 현재 pose를 QPainter로 그리는 위젯.
-
-좌표 변환 (ROS map → 픽셀):
-    px = (world_x - origin_x) / resolution
-    py = map_height - (world_y - origin_y) / resolution   ← Y축 반전
-
-표시 방식:
-    - 로봇마다 다른 색의 원(반지름 6px) + 방향 화살표
-    - 로봇 이름 라벨
-"""
 
 import math
 from PyQt5.QtWidgets import QWidget, QSizePolicy
@@ -30,16 +17,6 @@ _ROBOT_COLORS = [
 
 
 class MapWidget(QWidget):
-    """
-    Parameters
-    ----------
-    map_image_path : str
-        .pgm 또는 .png 경로
-    map_yaml : dict
-        { resolution, origin: [x, y, yaw], ... }
-    robot_names : list[str]
-        config 에서 읽은 로봇 이름 목록
-    """
 
     def __init__(self, map_image_path: str, map_yaml: dict,
              robot_names: list, hd_scale: int = 1, parent=None):

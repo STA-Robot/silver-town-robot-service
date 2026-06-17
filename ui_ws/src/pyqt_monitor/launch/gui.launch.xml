@@ -1,0 +1,10 @@
+<?xml version='1.0' ?>
+<launch>
+
+    <!-- PyQt Monitor — Qt 환경변수 추가 -->
+    <node pkg="pyqt_monitor" exec="pyqt_monitor" output="screen">
+        <env name="QT_QPA_PLATFORM_PLUGIN_PATH" value=""/>
+        <env name="QT_QPA_PLATFORM" value="xcb"/>
+    </node>
+
+</launch>
