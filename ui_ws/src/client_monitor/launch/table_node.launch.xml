@@ -2,8 +2,8 @@
 
 <launch>
 
-    <node pkg="client_monitor" exec="main" name="table_ui" output="screen">
-        <param from="config/table_config.yaml"/>
+    <node pkg="client_monitor" exec="client_monitor" name="table_ui" output="screen">
+        <param from="$(find-pkg-share client_monitor)/config/table_config.yaml"/>
     </node>
 
 </launch>
