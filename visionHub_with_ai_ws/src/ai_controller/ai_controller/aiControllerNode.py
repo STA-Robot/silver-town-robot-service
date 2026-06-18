@@ -1,5 +1,5 @@
 
-import json
+
 import threading
 from dataclasses import dataclass
 from typing import Optional
