@@ -8,8 +8,8 @@ class TableCallClient(Node):
     def __init__(self):
         super().__init__('table_call_client')
         # 파라미터 선언
-        self.declare_parameter('table_id', 'tent_1')
-        self.declare_parameter('waypoint', 'tent_1')
+        self.declare_parameter('table_id', 'table_1')
+        self.declare_parameter('waypoint', 'table_1')
         self.declare_parameter('wait_seconds', 20)
 
         # 값 가져오기

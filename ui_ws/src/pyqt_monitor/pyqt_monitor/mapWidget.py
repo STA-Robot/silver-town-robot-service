@@ -126,13 +126,14 @@ class MapWidget(QWidget):
                     sx: float, sy: float, yaw: float,
                     name: str, color: QColor):
         """원 + 방향선 + 이름 라벨."""
-        R = 8   # 원 반지름 (px)
+        R = 15 
         L = 14  # 방향선 길이 (px)
 
         # 원
         painter.setBrush(QBrush(color))
         painter.setPen(QPen(Qt.white, 1.5))
         painter.drawEllipse(QRectF(sx - R, sy - R, R * 2, R * 2))
+        #painter.drawRect(QRectF(sx - size/2, sy - size/2, size, size))
 
         # 방향 화살표
         # 시계방향 90도 회전 시 yaw도 -90도 보정
