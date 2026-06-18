@@ -16,6 +16,7 @@ from PyQt5.QtCore import Qt
 
 from .ViewerController import ViewerController
 from .robotStateSubscriber import RobotStateSubscriber
+from .taskEventSubscriber import TaskEventBridge
 from .mapWidget import MapWidget
 
 # ────────────────────────────────────────────────────────────────
@@ -164,8 +165,8 @@ class ControlUI(QWidget):
         # ViewerController, RobotStateSubscriber 생성
         self.viewer_ctrl  = ViewerController(self)
         self.state_sub    = RobotStateSubscriber(self)
+        self.task_event    = TaskEventBridge(self)
 
- 
         self.robot_frame  = QFrame()
         self.robot_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
         self.robot_layout = QVBoxLayout()
@@ -259,6 +260,7 @@ class ControlUI(QWidget):
             self.robot_ips.pop(robot_name, None)
             # 오프라인 시 맵에서 로봇 마커 제거
             self.map_widget.clear_pose(robot_name)
+            self.viewer_ctrl.clear_viewer.emit()
             self.add_event_log(f"{robot_name} 오프라인", self._now())
 
     # ── 로봇 state 수신 ────────────────────────────────────────
@@ -269,7 +271,15 @@ class ControlUI(QWidget):
         if item is None:
             return
         item.update_state(state, battery, available, emergency)
+        self.add_event_log(f"{robot_name}이 {state} 되었습니다", self._now())
     
+    def _on_task_event_received(self, data: dict):
+            robot_name = data.get("robot_name", "unknown")
+            event = data.get("event", "unknown")
+            action_category = data.get("action_category", "")
+
+            description = f"{robot_name}이 {event} {action_category}되었습니다"
+            self.add_event_log(description, self._now())
 
     # ── 이벤트 로그 ───────────────────────────────────────────
 

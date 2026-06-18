@@ -1,14 +1,12 @@
-import json
-import threading
-import time
-from typing import Optional
 
+import threading
+from typing import Optional
 import cv2
 import numpy as np
 
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
-from std_msgs.msg import String
+from robot_active_msgs.msg import RobotActive
 
 from PyQt5.QtCore import QObject, pyqtSignal, Qt
 from PyQt5.QtGui  import QImage, QPixmap
@@ -21,8 +19,8 @@ class ViewerRosNode(Node):
         self._on_robot_status_cb = on_robot_status_cb
         self._current_sub = None
 
-        self.create_subscription(String, '/robot_status', self._on_robot_status, 10)
-        self._viewer_req_pub = self.create_publisher(String, '/viewer_request', 10)
+        self.create_subscription(RobotActive, '/robot_status', self._on_robot_status, 10)
+        self._viewer_req_pub = self.create_publisher(RobotActive, '/viewer_request', 10)
 
     def _on_robot_status(self, msg):
         self._on_robot_status_cb(msg)
@@ -39,8 +37,10 @@ class ViewerRosNode(Node):
         self.get_logger().info(f"[Viewer] 구독: {topic}")
 
     def send_viewer_request(self, robot_name: str, action: str):
-        msg = String()
-        msg.data = f"{robot_name}:{action}"
+        msg = RobotActive()
+        msg.name = robot_name
+        msg.action = action
+      
         self._viewer_req_pub.publish(msg)
 
 
@@ -97,14 +97,18 @@ class ViewerController(QObject):
             return
         self.frame_ready.emit(frame)
 
-    def _on_robot_status(self, msg: String):
+    def _on_robot_status(self, msg: RobotActive):
         try:
-            data = json.loads(msg.data)
-            self.robot_status_signal.emit(data["name"], data["ip"], data["online"])
+            self.robot_status_signal.emit(
+            msg.name,
+            msg.ip,
+            msg.online
+            )
         except Exception as e:
-            self.ros.get_logger().warn(f"[robot_status 오류] {e}")
+            print(f"[robot_status 오류] {e}")
 
     def _show_frame(self, frame):
+        print(f"[frame] {frame}")
         rgb    = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w   = rgb.shape[:2]
         qimg   = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
@@ -114,6 +118,7 @@ class ViewerController(QObject):
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation,
         )
+       
         self.ui.viewer.setPixmap(pixmap)
 
     def _show_empty(self):
