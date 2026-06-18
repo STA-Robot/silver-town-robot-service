@@ -30,9 +30,10 @@ DEFAULT_WORKCELL_REQUEST_TOPIC = "/ingestor_requests"
 DEFAULT_WORKCELL_RESULT_TOPIC = "/ingestor_results"
 DEFAULT_WORKCELL_TARGET_GUID = "warehouse_pick_place_jetcobot1"
 DEFAULT_WORKCELL_TRANSPORTER_TYPE = "pinky"
-DEFAULT_WORKCELL_ITEM_TYPE_GUIDS = ["towel", "medicine_box", "cup"]
+DEFAULT_WORKCELL_ITEM_TYPE_GUIDS = ["medium_red_box"]
 DEFAULT_TASK_EVENT_TOPIC = "/task_events"
 DEFAULT_WAREHOUSE_HOLD_SECONDS = 3600
+DEFAULT_RETURN_POSE = [0.15874, 0.43924, 0.0]
 PICK_PLACE_SUFFIX = "-pick-place"
 TASK_STATE_NAMES = {
     TaskSummary.STATE_QUEUED: "queued",
@@ -63,6 +64,13 @@ class Mission:
     current_workcell_request_id: str | None = None
     storage_full: bool | None = None
     wait_seconds: int | None = None
+
+
+@dataclass
+class ReturnTarget:
+    map_name: str
+    pose: list[float]
+    waypoint: str = ""
 
 
 def build_table_collection_task(
@@ -240,6 +248,7 @@ class TaskOrchestrator(Node):
         warehouse_waypoint: str = "warehouse",
         return_map: str = "L1",
         return_pose: list[float] | None = None,
+        robot_return_targets: dict[str, ReturnTarget] | None = None,
         storage_full_default: bool = True,
         warehouse_hold_seconds: int = DEFAULT_WAREHOUSE_HOLD_SECONDS,
         workcell_request_topic: str = DEFAULT_WORKCELL_REQUEST_TOPIC,
@@ -256,7 +265,8 @@ class TaskOrchestrator(Node):
         self.default_wait_seconds = default_wait_seconds
         self.warehouse_waypoint = warehouse_waypoint
         self.return_map = return_map
-        self.return_pose = return_pose or [0.15874, 0.43924, 0.0]
+        self.return_pose = return_pose or DEFAULT_RETURN_POSE
+        self.robot_return_targets = robot_return_targets or {}
         self.storage_full_default = bool(storage_full_default)
         self.warehouse_hold_seconds = int(warehouse_hold_seconds)
         self.workcell_request_topic = workcell_request_topic
@@ -355,6 +365,7 @@ class TaskOrchestrator(Node):
             f"workcell={self.workcell_target_guid} "
             f"task_event_topic={self.task_event_topic} "
             f"return={self.return_map}:{self.return_pose} "
+            f"robot_return_targets={list(self.robot_return_targets.keys())} "
             f"services=/table_call,/follow_call,/cancel_follow_call"
         )
 
@@ -659,21 +670,32 @@ class TaskOrchestrator(Node):
 
     def _publish_robot_returning(self, robot_name: str) -> None:
         pub = self._get_robot_command_pub(robot_name)
+        return_target = self.robot_return_targets.get(robot_name)
+        if return_target is not None:
+            return_map = return_target.map_name
+            return_pose = return_target.pose
+            return_waypoint = return_target.waypoint
+        else:
+            return_map = self.return_map
+            return_pose = self.return_pose
+            return_waypoint = ""
 
         command = DriveCommand()
         command.header.stamp = self.get_clock().now().to_msg()
         command.robot_name = robot_name
         command.command_id = f"orchestrator-{robot_name}-returning-{time.time_ns()}"
         command.command_type = "returning"
-        command.map_name = self.return_map
-        command.x = float(self.return_pose[0])
-        command.y = float(self.return_pose[1])
-        command.yaw = float(self.return_pose[2])
+        command.map_name = return_map
+        command.x = float(return_pose[0])
+        command.y = float(return_pose[1])
+        command.yaw = float(return_pose[2])
+        command.target_name = return_waypoint
         command.payload_json = ""
         pub.publish(command)
         self.get_logger().info(
             f"published direct returning command robot={robot_name} "
-            f"command_id={command.command_id} pose={self.return_pose}"
+            f"command_id={command.command_id} target={return_waypoint} "
+            f"pose={return_pose}"
         )
 
     def _get_robot_command_pub(self, robot_name: str):
@@ -1435,6 +1457,32 @@ def _load_config(config_file: str) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def load_robot_return_targets(
+    config: dict,
+    default_map: str = "L1",
+) -> dict[str, ReturnTarget]:
+    targets: dict[str, ReturnTarget] = {}
+
+    for robot_name, target_config in config.get("robot_return_targets", {}).items():
+        pose = list(target_config.get("pose", []))
+        if len(pose) < 2:
+            continue
+        if len(pose) == 2:
+            pose.append(0.0)
+        targets[robot_name] = ReturnTarget(
+            map_name=str(
+                target_config.get(
+                    "map_name",
+                    target_config.get("map", default_map),
+                )
+            ),
+            pose=[float(pose[0]), float(pose[1]), float(pose[2])],
+            waypoint=str(target_config.get("waypoint", "")),
+        )
+
+    return targets
+
+
 def main(argv=sys.argv):
     rclpy.init(args=argv)
     args_without_ros = rclpy.utilities.remove_ros_args(argv)
@@ -1464,6 +1512,8 @@ def main(argv=sys.argv):
     args = parser.parse_args(args_without_ros[1:])
 
     config = _load_config(args.config_file)
+    return_map = str(config.get("return_map", "L1"))
+    robot_return_targets = load_robot_return_targets(config, return_map)
 
     node = TaskOrchestrator(
         fleet_name=config.get("fleet_name", args.fleet_name),
@@ -1482,8 +1532,9 @@ def main(argv=sys.argv):
             "warehouse_waypoint",
             args.warehouse_waypoint,
         ),
-        return_map=str(config.get("return_map", "L1")),
-        return_pose=list(config.get("return_pose", [0.15874, 0.43924, 0.0])),
+        return_map=return_map,
+        return_pose=list(config.get("return_pose", DEFAULT_RETURN_POSE)),
+        robot_return_targets=robot_return_targets,
         storage_full_default=bool(config.get("storage_full_default", True)),
         warehouse_hold_seconds=int(
             config.get("warehouse_hold_seconds", args.warehouse_hold_seconds)

@@ -55,6 +55,20 @@ DEFAULT_PICK_PLACE_PROGRESS = {
     "LIFTING": 0.85,
     "SERVO_FAILED": 0.0,
 }
+DEFAULT_PICK_PLACE_TASK_ID_MAP = {
+    "0": "0",
+    "large_blue_box": "0",
+    "large blue box": "0",
+    "large-blue-box": "0",
+    "1": "1",
+    "medium_red_box": "1",
+    "medium red box": "1",
+    "medium-red-box": "1",
+    "2": "2",
+    "small_yellow_box": "2",
+    "small yellow box": "2",
+    "small-yellow-box": "2",
+}
 
 
 class ConfigError(ValueError):
@@ -93,7 +107,14 @@ def validate_arm_manager_config(config: dict[str, Any]) -> dict[str, Any]:
     pick_place.setdefault("server_timeout", 5.0)
     pick_place.setdefault("seconds_estimate", 30.0)
     pick_place.setdefault("feedback_iteration_budget", 150)
-    pick_place.setdefault("task_id_source", "command_id")
+    pick_place.setdefault("task_id_source", "auto")
+    task_id_map = pick_place.setdefault("task_id_map", dict(DEFAULT_PICK_PLACE_TASK_ID_MAP))
+    if not isinstance(task_id_map, dict):
+        raise ConfigError("pick_place.task_id_map must be a mapping")
+    pick_place["task_id_map"] = {
+        normalize_task_id_key(source): str(task_id)
+        for source, task_id in task_id_map.items()
+    }
     state_map = pick_place.setdefault("state_map", dict(DEFAULT_PICK_PLACE_STATE_MAP))
     if not isinstance(state_map, dict):
         raise ConfigError("pick_place.state_map must be a mapping")
@@ -109,6 +130,10 @@ def validate_arm_manager_config(config: dict[str, Any]) -> dict[str, Any]:
     pick_place["task_id_source"] = str(pick_place["task_id_source"])
 
     return config
+
+
+def normalize_task_id_key(value: str) -> str:
+    return str(value).strip().lower()
 
 
 class JetCobotArmManager(Node):
@@ -227,6 +252,14 @@ class JetCobotArmManager(Node):
             return False, "arm is in emergency state"
         if self.command_active:
             return False, f"command already active: {self.active_command_id}"
+        if command.command_type == COMMAND_PICK_AND_PLACE:
+            task_id = self._task_id_for_command(command)
+            if task_id not in {"0", "1", "2"}:
+                return (
+                    False,
+                    "pick_and_place command requires a supported box task_id "
+                    "(0=Large Blue Box, 1=Medium Red Box, 2=Small Yellow Box)",
+                )
         return True, ""
 
     def _handle_pick_and_place(self, command: ArmCommand) -> None:
@@ -355,11 +388,65 @@ class JetCobotArmManager(Node):
 
     def _task_id_for_command(self, command: ArmCommand) -> str:
         source = self.config["pick_place"]["task_id_source"]
+        if source == "payload_json":
+            task_id = self._task_id_from_payload(command.payload_json)
+            if task_id:
+                return task_id
+        if source == "item_type_guid":
+            task_id = self._task_id_from_item_type_guids(command.item_type_guids)
+            if task_id:
+                return task_id
         if source == "mission_id" and command.mission_id:
-            return command.mission_id
-        if source == "payload_json" and command.payload_json:
-            return command.payload_json
-        return command.command_id
+            return self._normalize_task_id(command.mission_id)
+        if source == "auto":
+            return (
+                self._task_id_from_payload(command.payload_json)
+                or self._task_id_from_item_type_guids(command.item_type_guids)
+                or self._normalize_task_id(command.mission_id)
+                or self._normalize_task_id(command.command_id)
+            )
+        return self._normalize_task_id(command.command_id) or command.command_id
+
+    def _task_id_from_item_type_guids(self, item_type_guids: list[str]) -> str:
+        for item_type_guid in item_type_guids:
+            task_id = self._normalize_task_id(item_type_guid)
+            if task_id:
+                return task_id
+        return ""
+
+    def _task_id_from_payload(self, payload_json: str) -> str:
+        if not payload_json:
+            return ""
+
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            return self._normalize_task_id(payload_json)
+
+        if not isinstance(payload, dict):
+            return ""
+
+        task_id = self._normalize_task_id(payload.get("task_id", ""))
+        if task_id:
+            return task_id
+
+        for item in payload.get("items", []):
+            if not isinstance(item, dict):
+                continue
+            task_id = self._normalize_task_id(item.get("task_id", ""))
+            if task_id:
+                return task_id
+            task_id = self._normalize_task_id(item.get("type_guid", ""))
+            if task_id:
+                return task_id
+
+        return ""
+
+    def _normalize_task_id(self, source: str) -> str:
+        return self.config["pick_place"]["task_id_map"].get(
+            normalize_task_id_key(source),
+            "",
+        )
 
     def _pick_place_goal_response_callback(
         self,
