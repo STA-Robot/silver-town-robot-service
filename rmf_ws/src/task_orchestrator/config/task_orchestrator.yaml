@@ -19,6 +19,7 @@ robot_return_targets:
 storage_full_default: true
 workcell_request_topic: /ingestor_requests
 workcell_result_topic: /ingestor_results
+workcell_cancel_topic: /ingestor_cancel_requests
 workcell_target_guid: warehouse_pick_place_jetcobot1
 workcell_transporter_type: pinky
 workcell_item_type_guids: [medium_red_box]

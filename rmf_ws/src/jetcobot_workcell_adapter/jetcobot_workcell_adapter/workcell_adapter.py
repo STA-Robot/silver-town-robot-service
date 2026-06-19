@@ -9,10 +9,12 @@ from jetcobot_msgs.msg import ArmCommand, ArmState
 import rclpy
 from rclpy.node import Node
 from rmf_ingestor_msgs.msg import IngestorRequest, IngestorResult, IngestorState
+from std_msgs.msg import String
 import yaml
 
 
 COMMAND_PICK_AND_PLACE = "pick_and_place"
+COMMAND_STOP = "stop"
 COMMAND_SUCCEEDED = "succeeded"
 FINAL_FAILURE_STATUSES = {"failed", "rejected", "canceled"}
 PICK_PLACE_SUFFIX = "-pick-place"
@@ -81,6 +83,7 @@ class JetCobotWorkcellAdapter(Node):
         command_topic: str = "/jetcobot1/command",
         state_topic: str = "/jetcobot1/state",
         ingestor_request_topic: str = "/ingestor_requests",
+        ingestor_cancel_topic: str = "/ingestor_cancel_requests",
         ingestor_state_topic: str = "/ingestor_states",
         ingestor_result_topic: str = "/ingestor_results",
         state_publish_frequency: float = 2.0,
@@ -93,6 +96,7 @@ class JetCobotWorkcellAdapter(Node):
         self.command_topic = str(command_topic)
         self.state_topic = str(state_topic)
         self.ingestor_request_topic = str(ingestor_request_topic)
+        self.ingestor_cancel_topic = str(ingestor_cancel_topic)
         self.ingestor_state_topic = str(ingestor_state_topic)
         self.ingestor_result_topic = str(ingestor_result_topic)
         self.arm_state_timeout_sec = float(arm_state_timeout_sec)
@@ -127,6 +131,12 @@ class JetCobotWorkcellAdapter(Node):
             self._on_ingestor_request,
             qos_depth,
         )
+        self._cancel_sub = self.create_subscription(
+            String,
+            self.ingestor_cancel_topic,
+            self._on_ingestor_cancel_request,
+            qos_depth,
+        )
         self._arm_state_sub = self.create_subscription(
             ArmState,
             self.state_topic,
@@ -138,6 +148,7 @@ class JetCobotWorkcellAdapter(Node):
         self.get_logger().info(
             f"JetCobot workcell adapter ready target={self.target_guid} "
             f"arm={self.arm_name} request={self.ingestor_request_topic} "
+            f"cancel={self.ingestor_cancel_topic} "
             f"result={self.ingestor_result_topic} command={self.command_topic} "
             f"state={self.state_topic}"
         )
@@ -182,6 +193,65 @@ class JetCobotWorkcellAdapter(Node):
         self._try_dispatch_next()
         self._publish_state()
 
+    def _on_ingestor_cancel_request(self, msg: String) -> None:
+        try:
+            payload = json.loads(msg.data)
+        except json.JSONDecodeError as exc:
+            self.get_logger().warning(f"ignore malformed cancel request: {exc}")
+            return
+
+        if not isinstance(payload, dict):
+            self.get_logger().warning(f"ignore non-object cancel request: {msg.data}")
+            return
+
+        request_guid = str(payload.get("request_guid") or "")
+        reason = str(payload.get("reason") or "cancel requested")
+        mission_id = str(payload.get("mission_id") or "")
+        if not request_guid:
+            self.get_logger().warning("ignore cancel request without request_guid")
+            return
+
+        if (
+            self._active_request is not None
+            and self._active_request.request.request_guid == request_guid
+        ):
+            self._publish_stop_command(self._active_request, reason)
+            self._finish_active_request(
+                IngestorResult.FAILED,
+                f"canceled by request: {reason}",
+                dispatch_next=False,
+            )
+            self.get_logger().warning(
+                f"canceled active workcell request request_guid={request_guid} "
+                f"mission={mission_id} reason={reason}"
+            )
+            return
+
+        retained = deque()
+        canceled = None
+        while self._queue:
+            pending = self._queue.popleft()
+            if pending.request.request_guid == request_guid and canceled is None:
+                canceled = pending
+                continue
+            retained.append(pending)
+        self._queue = retained
+
+        if canceled is not None:
+            self._completed_request_ids.add(request_guid)
+            self._publish_result(request_guid, IngestorResult.FAILED)
+            self.get_logger().warning(
+                f"canceled queued workcell request request_guid={request_guid} "
+                f"mission={mission_id} reason={reason}"
+            )
+            self._publish_state()
+            return
+
+        self.get_logger().debug(
+            f"ignore cancel for unknown workcell request request_guid={request_guid} "
+            f"mission={mission_id}"
+        )
+
     def _is_known_request(self, request_guid: str) -> bool:
         if request_guid in self._completed_request_ids:
             return True
@@ -213,7 +283,12 @@ class JetCobotWorkcellAdapter(Node):
         else:
             self._publish_state()
 
-    def _finish_active_request(self, status: int, message: str) -> None:
+    def _finish_active_request(
+        self,
+        status: int,
+        message: str,
+        dispatch_next: bool = True,
+    ) -> None:
         if self._active_request is None:
             return
 
@@ -226,8 +301,33 @@ class JetCobotWorkcellAdapter(Node):
             f"status={status_name} message={message}"
         )
         self._active_request = None
-        self._try_dispatch_next()
+        if dispatch_next:
+            self._try_dispatch_next()
         self._publish_state()
+
+    def _publish_stop_command(self, pending: PendingRequest, reason: str) -> None:
+        request_guid = pending.request.request_guid
+        command = ArmCommand()
+        command.header.stamp = self.get_clock().now().to_msg()
+        command.arm_name = pending.arm_name
+        command.command_id = (
+            f"{request_guid}-stop-{self.get_clock().now().nanoseconds}"
+        )
+        command.command_type = COMMAND_STOP
+        command.mission_id = mission_id_from_request_guid(request_guid)
+        command.item_type_guids = self._item_type_guids(pending.request)
+        command.payload_json = json.dumps(
+            {
+                "canceled_request_guid": request_guid,
+                "reason": reason,
+            },
+            sort_keys=True,
+        )
+        self._command_pub.publish(command)
+        self.get_logger().warning(
+            f"published workcell stop command command_id={command.command_id} "
+            f"request_guid={request_guid} reason={reason}"
+        )
 
     def _try_dispatch_next(self) -> None:
         if self._active_request is not None or not self._queue:
@@ -360,6 +460,10 @@ def main(argv=sys.argv):
         ingestor_request_topic=config.get(
             "ingestor_request_topic",
             "/ingestor_requests",
+        ),
+        ingestor_cancel_topic=config.get(
+            "ingestor_cancel_topic",
+            "/ingestor_cancel_requests",
         ),
         ingestor_state_topic=config.get("ingestor_state_topic", "/ingestor_states"),
         ingestor_result_topic=config.get(

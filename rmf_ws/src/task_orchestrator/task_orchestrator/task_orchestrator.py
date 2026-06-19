@@ -28,6 +28,7 @@ DEFAULT_TASK_API_REQUEST_TOPIC = "task_api_requests"
 DEFAULT_TASK_API_RESPONSE_TOPIC = "task_api_responses"
 DEFAULT_WORKCELL_REQUEST_TOPIC = "/ingestor_requests"
 DEFAULT_WORKCELL_RESULT_TOPIC = "/ingestor_results"
+DEFAULT_WORKCELL_CANCEL_TOPIC = "/ingestor_cancel_requests"
 DEFAULT_WORKCELL_TARGET_GUID = "warehouse_pick_place_jetcobot1"
 DEFAULT_WORKCELL_TRANSPORTER_TYPE = "pinky"
 DEFAULT_WORKCELL_ITEM_TYPE_GUIDS = ["medium_red_box"]
@@ -253,6 +254,7 @@ class TaskOrchestrator(Node):
         warehouse_hold_seconds: int = DEFAULT_WAREHOUSE_HOLD_SECONDS,
         workcell_request_topic: str = DEFAULT_WORKCELL_REQUEST_TOPIC,
         workcell_result_topic: str = DEFAULT_WORKCELL_RESULT_TOPIC,
+        workcell_cancel_topic: str = DEFAULT_WORKCELL_CANCEL_TOPIC,
         workcell_target_guid: str = DEFAULT_WORKCELL_TARGET_GUID,
         workcell_transporter_type: str = DEFAULT_WORKCELL_TRANSPORTER_TYPE,
         workcell_item_type_guids: list[str] | None = None,
@@ -271,6 +273,7 @@ class TaskOrchestrator(Node):
         self.warehouse_hold_seconds = int(warehouse_hold_seconds)
         self.workcell_request_topic = workcell_request_topic
         self.workcell_result_topic = workcell_result_topic
+        self.workcell_cancel_topic = workcell_cancel_topic
         self.workcell_target_guid = workcell_target_guid
         self.workcell_transporter_type = workcell_transporter_type
         self.workcell_item_type_guids = (
@@ -314,6 +317,11 @@ class TaskOrchestrator(Node):
             IngestorResult,
             workcell_result_topic,
             self._on_ingestor_result,
+            10,
+        )
+        self.workcell_cancel_pub = self.create_publisher(
+            String,
+            workcell_cancel_topic,
             10,
         )
         self.task_event_sub = self.create_subscription(
@@ -363,6 +371,7 @@ class TaskOrchestrator(Node):
             f"warehouse_hold_seconds={self.warehouse_hold_seconds} "
             f"storage_full_default={self.storage_full_default} "
             f"workcell={self.workcell_target_guid} "
+            f"workcell_cancel_topic={self.workcell_cancel_topic} "
             f"task_event_topic={self.task_event_topic} "
             f"return={self.return_map}:{self.return_pose} "
             f"robot_return_targets={list(self.robot_return_targets.keys())} "
@@ -988,7 +997,37 @@ class TaskOrchestrator(Node):
             f"task_id={task_id} response={response}"
         )
 
+    def publish_workcell_cancel(
+        self,
+        mission: Mission,
+        request_guid: str,
+        reason: str,
+    ) -> None:
+        msg = String()
+        msg.data = json.dumps(
+            {
+                "request_guid": request_guid,
+                "mission_id": mission.mission_id,
+                "reason": reason,
+            },
+            sort_keys=True,
+        )
+        self.workcell_cancel_pub.publish(msg)
+        self.get_logger().warning(
+            f"published workcell cancel mission={mission.mission_id} "
+            f"request_guid={request_guid} reason={reason}"
+        )
+
     def _on_ingestor_result(self, msg: IngestorResult) -> None:
+        if (
+            msg.status != IngestorResult.ACKNOWLEDGED
+            and msg.request_guid in self.completed_workcell_request_ids
+        ):
+            self.get_logger().debug(
+                f"duplicate final workcell result request_guid={msg.request_guid}"
+            )
+            return
+
         mission = self.missions_by_workcell_request_id.get(msg.request_guid)
         if mission is None:
             self.get_logger().debug(
@@ -1000,12 +1039,6 @@ class TaskOrchestrator(Node):
             self.get_logger().info(
                 f"workcell acknowledged mission={mission.mission_id} "
                 f"request_guid={msg.request_guid}"
-            )
-            return
-
-        if msg.request_guid in self.completed_workcell_request_ids:
-            self.get_logger().debug(
-                f"duplicate final workcell result request_guid={msg.request_guid}"
             )
             return
 
@@ -1091,6 +1124,10 @@ class TaskOrchestrator(Node):
     def _on_action_completed_event(self, event: dict) -> None:
         action_category = str(event.get("action_category") or "")
         mission_id = str(event.get("mission_id") or "")
+        if action_category == "wait_at_warehouse":
+            self._on_warehouse_hold_completed_event(event)
+            return
+
         if action_category != "wait_at_table" or not mission_id:
             return
 
@@ -1121,6 +1158,52 @@ class TaskOrchestrator(Node):
             f"robot={mission.assigned_robot}"
         )
         self.on_table_task_completed(mission)
+
+    def _on_warehouse_hold_completed_event(self, event: dict) -> None:
+        mission_id = str(event.get("mission_id") or "")
+        table = str(event.get("table") or "")
+        if table != self.warehouse_waypoint or not mission_id:
+            return
+
+        mission = self.missions_by_id.get(mission_id)
+        if mission is None:
+            self.get_logger().debug(
+                f"ignore warehouse hold timeout for unknown mission={mission_id}"
+            )
+            return
+
+        request_guid = mission.current_workcell_request_id
+        if mission.state != "workcell_request_submitted" or not request_guid:
+            self.get_logger().debug(
+                f"ignore warehouse hold timeout mission={mission_id} "
+                f"state={mission.state} request_guid={request_guid}"
+            )
+            return
+
+        robot_name = str(event.get("robot_name") or "")
+        if robot_name and mission.assigned_robot and mission.assigned_robot != robot_name:
+            self.get_logger().warning(
+                f"ignore warehouse hold timeout mission={mission_id} "
+                f"event_robot={robot_name} assigned_robot={mission.assigned_robot}"
+            )
+            return
+        if robot_name and not mission.assigned_robot:
+            mission.assigned_robot = robot_name
+
+        reason = "warehouse hold timeout"
+        self.publish_workcell_cancel(mission, request_guid, reason)
+        self.completed_workcell_request_ids.add(request_guid)
+        self.missions_by_workcell_request_id.pop(request_guid, None)
+        mission.current_workcell_request_id = None
+        self._log_mission_transition(
+            mission,
+            "intervention_required",
+            f"workcell_timeout request_guid={request_guid}",
+        )
+        self.get_logger().warning(
+            f"workcell timed out mission={mission.mission_id} "
+            f"robot={mission.assigned_robot} request_guid={request_guid}"
+        )
 
     def _on_navigation_completed_event(self, event: dict) -> None:
         destination_name = str(event.get("destination_name") or "")
@@ -1544,6 +1627,9 @@ def main(argv=sys.argv):
         ),
         workcell_result_topic=str(
             config.get("workcell_result_topic", DEFAULT_WORKCELL_RESULT_TOPIC)
+        ),
+        workcell_cancel_topic=str(
+            config.get("workcell_cancel_topic", DEFAULT_WORKCELL_CANCEL_TOPIC)
         ),
         workcell_target_guid=str(
             config.get("workcell_target_guid", DEFAULT_WORKCELL_TARGET_GUID)
