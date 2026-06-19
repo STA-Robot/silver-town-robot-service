@@ -7,9 +7,18 @@ warehouse_waypoint: warehouse
 warehouse_hold_seconds: 10
 return_map: L1
 return_pose: [0.15874, 0.43924, 0.0]
+robot_return_targets:
+  pinky1:
+    map: L1
+    waypoint: pinky1_parking_spot
+    pose: [0.121, 1.629, -1.5708]
+  pinky2:
+    map: L1
+    waypoint: pinky2_parking_spot
+    pose: [-0.029, 1.629, -1.5708]
 storage_full_default: true
 workcell_request_topic: /ingestor_requests
 workcell_result_topic: /ingestor_results
 workcell_target_guid: warehouse_pick_place_jetcobot1
 workcell_transporter_type: pinky
-workcell_item_type_guids: [towel, medicine_box, cup]
+workcell_item_type_guids: [medium_red_box]

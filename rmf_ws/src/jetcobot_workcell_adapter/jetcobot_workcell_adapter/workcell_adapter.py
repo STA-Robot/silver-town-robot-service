@@ -16,6 +16,25 @@ COMMAND_PICK_AND_PLACE = "pick_and_place"
 COMMAND_SUCCEEDED = "succeeded"
 FINAL_FAILURE_STATUSES = {"failed", "rejected", "canceled"}
 PICK_PLACE_SUFFIX = "-pick-place"
+BOX_TASK_ID_BY_ITEM_TYPE = {
+    "0": "0",
+    "large_blue_box": "0",
+    "large blue box": "0",
+    "large-blue-box": "0",
+    "1": "1",
+    "medium_red_box": "1",
+    "medium red box": "1",
+    "medium-red-box": "1",
+    "2": "2",
+    "small_yellow_box": "2",
+    "small yellow box": "2",
+    "small-yellow-box": "2",
+}
+BOX_LABEL_BY_TASK_ID = {
+    "0": "Large Blue Box",
+    "1": "Medium Red Box",
+    "2": "Small Yellow Box",
+}
 
 
 @dataclass
@@ -36,6 +55,22 @@ def mission_id_from_request_guid(request_guid: str) -> str:
     if request_guid.endswith(PICK_PLACE_SUFFIX):
         return request_guid[: -len(PICK_PLACE_SUFFIX)]
     return request_guid
+
+
+def normalize_item_type_guid(type_guid: str) -> str:
+    return str(type_guid).strip().lower()
+
+
+def task_id_from_item_type_guid(type_guid: str) -> str | None:
+    return BOX_TASK_ID_BY_ITEM_TYPE.get(normalize_item_type_guid(type_guid))
+
+
+def task_id_from_item_type_guids(type_guids: list[str]) -> str | None:
+    for type_guid in type_guids:
+        task_id = task_id_from_item_type_guid(type_guid)
+        if task_id is not None:
+            return task_id
+    return None
 
 
 class JetCobotWorkcellAdapter(Node):
@@ -127,12 +162,22 @@ class JetCobotWorkcellAdapter(Node):
             self._publish_result(request.request_guid, IngestorResult.ACKNOWLEDGED)
             return
 
+        task_id = task_id_from_item_type_guids(self._item_type_guids(request))
+        if task_id is None:
+            self.get_logger().warning(
+                f"reject ingestor request request_guid={request.request_guid}: "
+                f"no supported box item in {[item.type_guid for item in request.items]}"
+            )
+            self._publish_result(request.request_guid, IngestorResult.FAILED)
+            return
+
         pending = PendingRequest(request=request, arm_name=self.arm_name)
         self._queue.append(pending)
         self._publish_result(request.request_guid, IngestorResult.ACKNOWLEDGED)
         self.get_logger().info(
             f"accepted ingestor request request_guid={request.request_guid} "
-            f"target={request.target_guid} queue={len(self._queue)}"
+            f"target={request.target_guid} task_id={task_id} "
+            f"box={BOX_LABEL_BY_TASK_ID[task_id]} queue={len(self._queue)}"
         )
         self._try_dispatch_next()
         self._publish_state()
@@ -223,14 +268,19 @@ class JetCobotWorkcellAdapter(Node):
         command.command_id = request.request_guid
         command.command_type = COMMAND_PICK_AND_PLACE
         command.mission_id = mission_id_from_request_guid(request.request_guid)
-        command.item_type_guids = self._item_type_guids(request)
+        item_type_guids = self._item_type_guids(request)
+        task_id = task_id_from_item_type_guids(item_type_guids)
+        command.item_type_guids = item_type_guids
         command.payload_json = json.dumps(
             {
                 "target_guid": request.target_guid,
                 "transporter_type": request.transporter_type,
+                "task_id": task_id,
+                "box": BOX_LABEL_BY_TASK_ID.get(task_id, ""),
                 "items": [
                     {
                         "type_guid": item.type_guid,
+                        "task_id": task_id_from_item_type_guid(item.type_guid),
                         "quantity": int(item.quantity),
                         "compartment_name": item.compartment_name,
                     }

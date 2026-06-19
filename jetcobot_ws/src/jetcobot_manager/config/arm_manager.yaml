@@ -3,7 +3,17 @@ pick_place:
   server_timeout: 5.0
   seconds_estimate: 30.0
   feedback_iteration_budget: 150
-  task_id_source: command_id
+  task_id_source: auto
+  task_id_map:
+    large_blue_box: "0"
+    large blue box: "0"
+    "0": "0"
+    medium_red_box: "1"
+    medium red box: "1"
+    "1": "1"
+    small_yellow_box: "2"
+    small yellow box: "2"
+    "2": "2"
   state_map:
     GO_READY: homing
     SEARCHING: aligning
