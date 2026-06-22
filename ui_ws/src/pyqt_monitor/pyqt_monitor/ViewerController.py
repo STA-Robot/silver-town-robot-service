@@ -51,12 +51,12 @@ class ViewerController(QObject):
     clear_viewer        = pyqtSignal()
     robot_status_signal = pyqtSignal(str, str, bool)
 
-    def __init__(self, ui, video_udp=None):
+    def __init__(self, ui):
         QObject.__init__(self)
         self.ui   = ui
         self.lock = threading.Lock()
         self._viewed_name: Optional[str] = None
-        self._video_udp = video_udp
+        
 
         self.ros = ViewerRosNode(
             on_frame_cb=self._on_frame,
@@ -95,17 +95,10 @@ class ViewerController(QObject):
             np.frombuffer(ros_msg.data, np.uint8), cv2.IMREAD_COLOR
         )
         if frame is None:
-            print("[_on_frame] frame is None, return")
             return
-        if self._video_udp:
-            self._video_udp.send(bytes(ros_msg.data))  # Unity로 UDP 전송
 
-        print("[_on_frame] emit 전")
         self.frame_ready.emit(frame)
-        print("[_on_frame] emit 후") 
-        print(f"[UDP] _video_udp: {self._video_udp}, addr: {self._video_udp._addr if self._video_udp else 'None'}")  # ← 추가
 
-        
 
     def _on_robot_status(self, msg: RobotActive):
         try:

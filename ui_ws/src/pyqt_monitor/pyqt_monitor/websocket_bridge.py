@@ -7,23 +7,15 @@ import websockets
 
 class WebSocketBridge:
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 8765,on_client_connected=None):
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765):
         self.host = host
         self.port = port
-        self.unity_ip = None
-        self.clients: set = set()
-        self._on_client_connected = on_client_connected#-udo추가
+        self.clients: set = set() 
         self.loop: asyncio.AbstractEventLoop | None = None
 
     async def _handler(self, websocket):
         self.clients.add(websocket)
         print(f"[WS] 연결: {websocket.remote_address}")
-        unity_ip = websocket.remote_address[0]#-udo추가
- 
-        if self._on_client_connected:#-udo추가
-            self._on_client_connected(unity_ip)
-            print(f"[WSunity_ip] 연결: {unity_ip}")
-
         try:
             async for _ in websocket:
                 pass  # Unity → Python 방향 현재 미사용

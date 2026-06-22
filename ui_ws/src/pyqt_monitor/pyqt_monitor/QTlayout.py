@@ -17,7 +17,6 @@ from PyQt5.QtCore import Qt
 from .ViewerController import ViewerController
 from .robotStateSubscriber import RobotStateSubscriber
 from .taskEventSubscriber import TaskEventBridge
-from .videoUdpBridge import VideoUdpBridge
 from .websocket_bridge import WebSocketBridge
 from .mapWidget import MapWidget
 
@@ -167,19 +166,12 @@ class ControlUI(QWidget):
         self.event_frame.setLayout(self.event_layout)
 
         # ── ROBOT STATE ───────────────────────────────────────
-        ViewerController, RobotStateSubscriber #생성
-        self.video_udp = VideoUdpBridge(unity_port=9100)
-        def on_connected(ip):
-            print(f"[연결됨] {ip}", flush=True)
-            self.video_udp.set_unity_ip(ip)
-
-        self.ws_bridge = WebSocketBridge(on_client_connected=on_connected)
-        self.viewer_ctrl  = ViewerController(self, video_udp=self.video_udp)
+        
+        self.ws_bridge = WebSocketBridge()
+        self.viewer_ctrl  = ViewerController(self)
         self.state_sub    = RobotStateSubscriber(self,ws_bridge=self.ws_bridge)
         self.task_event    = TaskEventBridge(self)
    
-
-       
         self.robot_frame  = QFrame()
         self.robot_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
         self.robot_layout = QVBoxLayout()

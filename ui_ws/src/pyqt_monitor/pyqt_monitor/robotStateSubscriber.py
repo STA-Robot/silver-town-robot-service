@@ -1,6 +1,7 @@
 import os
 import time
 import yaml
+import math
 from ament_index_python.packages import get_package_share_directory
 from typing import Callable
 
@@ -108,7 +109,7 @@ class RobotStateSubscriber(QObject):
                 "state":      state,
                 "battery":    float(battery),
                 "px": x, "py": y, "pz": 0.0,
-                "yaw": yaw,
+                "yaw": math.degrees(-float(yaw)),
             })
 
     def _on_offline_cb(self, robot_name):

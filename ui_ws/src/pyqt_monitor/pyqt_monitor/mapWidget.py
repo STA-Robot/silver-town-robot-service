@@ -126,7 +126,7 @@ class MapWidget(QWidget):
                     sx: float, sy: float, yaw: float,
                     name: str, color: QColor):
         """원 + 방향선 + 이름 라벨."""
-        R = 16
+        R = 20
         L = 14 # 방향선 길이 (px)
 
         # 원
