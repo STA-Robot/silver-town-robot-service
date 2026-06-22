@@ -6,11 +6,16 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 class TaskEventBridge(QObject):
      
-     event_received = pyqtSignal(dict)
-     def __init__(self, ui):
+    event_received = pyqtSignal(dict)
+    def __init__(self, ui):
         QObject.__init__(self)
         self.ui = ui
+        self.ros=TaskEventSubscriberNode(self)
+        
         self.event_received.connect(self.ui._on_task_event_received)
+
+    def get_ros_node(self):
+        return self.ros
 
 
 class TaskEventSubscriberNode(Node):
