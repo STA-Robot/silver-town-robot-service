@@ -16,6 +16,9 @@ from PyQt5.QtCore import Qt
 
 from .ViewerController import ViewerController
 from .robotStateSubscriber import RobotStateSubscriber
+from .taskEventSubscriber import TaskEventBridge
+from .videoUdpBridge import VideoUdpBridge
+from .websocket_bridge import WebSocketBridge
 from .mapWidget import MapWidget
 
 # ────────────────────────────────────────────────────────────────
@@ -105,6 +108,9 @@ class ControlUI(QWidget):
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
+        self.robot_items = {}
+        self._prev_states = {}  # 이전 상태 저장용
+
         # ── config 로드 (로봇 목록 먼저 필요) ─────────────────
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
@@ -161,11 +167,16 @@ class ControlUI(QWidget):
         self.event_frame.setLayout(self.event_layout)
 
         # ── ROBOT STATE ───────────────────────────────────────
-        # ViewerController, RobotStateSubscriber 생성
-        self.viewer_ctrl  = ViewerController(self)
-        self.state_sub    = RobotStateSubscriber(self)
 
- 
+        self.video_udp = VideoUdpBridge(unity_port=9100)
+        def on_connected(ip):
+            self.video_udp.set_unity_ip(ip)
+
+        self.ws_bridge = WebSocketBridge(on_client_connected=on_connected)
+        self.viewer_ctrl  = ViewerController(self, video_udp=self.video_udp)
+        self.state_sub    = RobotStateSubscriber(self,ws_bridge=self.ws_bridge)
+        self.task_event    = TaskEventBridge(self)
+   
         self.robot_frame  = QFrame()
         self.robot_frame.setStyleSheet("border: 1px solid #bcbcbc; background-color: white;")
         self.robot_layout = QVBoxLayout()
@@ -236,6 +247,7 @@ class ControlUI(QWidget):
         self.setLayout(main_layout)
         self.setStyleSheet("background-color: #f0f0f0;")
 
+    
     # ── 로봇 온/오프라인 (VideoReceiver → 온/오프라인) ─────────
 
     def _on_robot_status(self, robot_name: str, robot_ip: str, online: bool):
@@ -259,6 +271,7 @@ class ControlUI(QWidget):
             self.robot_ips.pop(robot_name, None)
             # 오프라인 시 맵에서 로봇 마커 제거
             self.map_widget.clear_pose(robot_name)
+            self.viewer_ctrl.clear_viewer.emit()
             self.add_event_log(f"{robot_name} 오프라인", self._now())
 
     # ── 로봇 state 수신 ────────────────────────────────────────
@@ -268,8 +281,24 @@ class ControlUI(QWidget):
         item = self.robot_items.get(robot_name)
         if item is None:
             return
-        item.update_state(state, battery, available, emergency)
+        # 이전 상태 가져오기
+        prev_state = self._prev_states.get(robot_name)
+
+        # 상태가 바뀌었을 때만 처리
+        if prev_state != state:
+            item.update_state(state, battery, available, emergency)
+            self.add_event_log(f"{robot_name}이 {state} 되었습니다", self._now())
+
+            # 상태 업데이트
+            self._prev_states[robot_name] = state
     
+    def _on_task_event_received(self, data: dict):
+            robot_name = data.get("robot_name", "unknown")
+            event = data.get("event", "unknown")
+            action_category = data.get("action_category", "")
+
+            description = f"{robot_name}이 {event} {action_category}되었습니다"
+            self.add_event_log(description, self._now())
 
     # ── 이벤트 로그 ───────────────────────────────────────────
 

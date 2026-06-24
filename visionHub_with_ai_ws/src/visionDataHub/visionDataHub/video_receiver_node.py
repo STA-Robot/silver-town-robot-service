@@ -6,7 +6,7 @@ import yaml
 import os
 
 from ament_index_python.packages import get_package_share_directory
-
+from robot_active_msgs.msg import RobotActive
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import CompressedImage
@@ -64,11 +64,11 @@ class VideoReceiverNode(Node):
             for name in self.robots
         }
 
-        self.status_pub = self.create_publisher(String, '/robot_status', 10)
+        self.status_pub = self.create_publisher(RobotActive, '/robot_status', 10)
 
         # ── 구독 ──────────────────────────────────────────────
         # GUI 보기 요청: "pinky1:on" / "pinky1:off"
-        self.create_subscription(String, '/viewer_request', self._on_viewer_request, 10)
+        self.create_subscription(RobotActive, '/viewer_request', self._on_viewer_request, 10)
         # Follow 요청: {"robot_name":"pinky1","command":"start"/"stop"}
         self.create_subscription(String, '/follow_command', self._on_follow_command,  10)
 
@@ -92,9 +92,10 @@ class VideoReceiverNode(Node):
     # ── /viewer_request 콜백 ─────────────────────────────────
     # MonitorNode(pyqt_monitor) → "pinky1:on" / "pinky1:off"
 
-    def _on_viewer_request(self, msg: String):
+    def _on_viewer_request(self, msg: RobotActive):
         try:
-            robot_name, action = msg.data.split(":")
+            robot_name = msg.name
+            action = msg.action
             if robot_name not in self.robots:
                 return
             if action == "on":
@@ -179,8 +180,10 @@ class VideoReceiverNode(Node):
     # ── 상태 발행 ─────────────────────────────────────────────
 
     def _publish_status(self, robot_name: str, robot_ip: str, online: bool):
-        msg = String()
-        msg.data = json.dumps({"name": robot_name, "ip": robot_ip, "online": online})
+        msg = RobotActive()
+        msg.name = robot_name
+        msg.ip = robot_ip
+        msg.online = online
         self.status_pub.publish(msg)
 
     def _publish_viewer(self, robot_name: str, jpeg: bytes):

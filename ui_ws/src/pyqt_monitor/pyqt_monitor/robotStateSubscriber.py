@@ -1,6 +1,7 @@
 import os
 import time
 import yaml
+import math
 from ament_index_python.packages import get_package_share_directory
 from typing import Callable
 
@@ -53,7 +54,7 @@ class RobotStateNode(Node):
             y=y,
             yaw=yaw,
         )
-        print(f"[DEBUG] {msg.robot_name} state={msg.state} pose={list(msg.pose)}")
+        
 
     def _check_timeout(self):
         now = time.time()
@@ -74,10 +75,10 @@ class RobotStateSubscriber(QObject):
     # robot_name (통신 끊김 → 지도에서 제거)
     robot_offline_signal = pyqtSignal(str)
 
-    def __init__(self, ui):
+    def __init__(self, ui ,ws_bridge=None):
         QObject.__init__(self)
         self.ui = ui
-
+        self.ws_bridge = ws_bridge
         config_path = os.path.join(
             get_package_share_directory('visionDataHub'),
             'config', 'video_config.yaml'
@@ -102,6 +103,14 @@ class RobotStateSubscriber(QObject):
             robot_name, state, float(battery), available, emergency
         )
         self.robot_pose_signal.emit(robot_name, float(x), float(y), float(yaw))
+        if self.ws_bridge:
+            self.ws_bridge.send_threadsafe({
+                "robotId": robot_name,
+                "state":      state,
+                "battery":    float(battery),
+                "px": x, "py": y, "pz": 0.0,
+                "yaw": math.degrees(-float(yaw)),
+            })
 
     def _on_offline_cb(self, robot_name):
         self.robot_offline_signal.emit(robot_name)
