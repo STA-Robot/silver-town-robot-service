@@ -16,7 +16,7 @@ GESTURE_MAPPING = {
     "Scissors": Event.FOLLOW,
 }
  
-CONF_THRESHOLD = 0.60
+CONF_THRESHOLD = 0.40
 
 # 투표 설정- 순시간에 지나가는 제스처 무시 3프레임 까지 같은 동작
 VOTE_WINDOW    = 5   # 최근 몇 프레임을 볼 것인가
