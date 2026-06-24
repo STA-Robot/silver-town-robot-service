@@ -95,15 +95,14 @@ class ViewerController(QObject):
             np.frombuffer(ros_msg.data, np.uint8), cv2.IMREAD_COLOR
         )
         if frame is None:
-            print("[_on_frame] frame is None, return")
+          
             return
         if self._video_udp:
-            self._video_udp.send(bytes(ros_msg.data))  # Unity로 UDP 전송
-
-        print("[_on_frame] emit 전")
+            self._video_udp.send(self._viewed_name, bytes(ros_msg.data))
+       
         self.frame_ready.emit(frame)
-        print("[_on_frame] emit 후") 
-        print(f"[UDP] _video_udp: {self._video_udp}, addr: {self._video_udp._addr if self._video_udp else 'None'}")  # ← 추가
+ 
+        
 
         
 
