@@ -95,9 +95,20 @@ class ViewerController(QObject):
             np.frombuffer(ros_msg.data, np.uint8), cv2.IMREAD_COLOR
         )
         if frame is None:
+<<<<<<< HEAD
             return
 
         self.frame_ready.emit(frame)
+=======
+          
+            return
+        if self._video_udp:
+            self._video_udp.send(self._viewed_name, bytes(ros_msg.data))
+       
+        self.frame_ready.emit(frame)
+ 
+        
+>>>>>>> feature/websocket_KDH
 
 
     def _on_robot_status(self, msg: RobotActive):
