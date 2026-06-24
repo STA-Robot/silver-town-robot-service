@@ -51,12 +51,12 @@ class ViewerController(QObject):
     clear_viewer        = pyqtSignal()
     robot_status_signal = pyqtSignal(str, str, bool)
 
-    def __init__(self, ui):
+    def __init__(self, ui,video_udp=None):
         QObject.__init__(self)
         self.ui   = ui
         self.lock = threading.Lock()
         self._viewed_name: Optional[str] = None
-        
+        self._video_udp = video_udp 
 
         self.ros = ViewerRosNode(
             on_frame_cb=self._on_frame,
@@ -95,21 +95,11 @@ class ViewerController(QObject):
             np.frombuffer(ros_msg.data, np.uint8), cv2.IMREAD_COLOR
         )
         if frame is None:
-<<<<<<< HEAD
-            return
-
-        self.frame_ready.emit(frame)
-=======
-          
             return
         if self._video_udp:
             self._video_udp.send(self._viewed_name, bytes(ros_msg.data))
        
         self.frame_ready.emit(frame)
- 
-        
->>>>>>> feature/websocket_KDH
-
 
     def _on_robot_status(self, msg: RobotActive):
         try:
